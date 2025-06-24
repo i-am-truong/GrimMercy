@@ -1,5 +1,3 @@
-
-
 import io.socket.emitter.Emitter;
 import jsclub.codefest.sdk.Hero;
 import jsclub.codefest.sdk.algorithm.PathUtils;
@@ -13,10 +11,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Main {
-    private static final String SERVER_URL = "https://cf25-server-staging.jsclub.dev/";
-    private static final String GAME_ID = "109910";
+    private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
+    private static final String GAME_ID = "173244";
     private static final String PLAYER_NAME = "grimmercy";
-    private static final String SECRET_KEY = "sk--548ZnIYTk6CR2B-GPJgng:EQVVcoJMz-Buk0lgIej9IbH7ORwV4gTgfIJAGZyIuTGBD8aJwrLyDvVqv8b5hcy4_GWcPOtra5qPWNtxp3okgg";
+    private static final String SECRET_KEY = "sk-KYq9SKlyRPeY4fC1OYlMSA:YuysaMB24qc0z_r3fka8dp0kHwDwOvqiieQDrCJL9aykR82NlqODqOuJyr2X3eItbl-FECSuHBPzftbOHcyAgw";
 
 
     public static void main(String[] args) throws IOException {
