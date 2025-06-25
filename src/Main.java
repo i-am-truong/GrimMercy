@@ -12,9 +12,9 @@ import java.util.List;
 
 public class Main {
     private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
-    private static final String GAME_ID = "173244";
+    private static final String GAME_ID = "126619";
     private static final String PLAYER_NAME = "grimmercy";
-    private static final String SECRET_KEY = "sk-KYq9SKlyRPeY4fC1OYlMSA:YuysaMB24qc0z_r3fka8dp0kHwDwOvqiieQDrCJL9aykR82NlqODqOuJyr2X3eItbl-FECSuHBPzftbOHcyAgw";
+    private static final String SECRET_KEY = "sk-wTYK8L3_QJ6FF-mGnyvJCg:XZjA6VPoh2KSUna4Moem4MZRILvIf3FxnLt28T3c_x7-BnUtuK1_MO7IYwh2jxBn6mm2opDS5_VKok3J8BaTeQ";
 
 
     public static void main(String[] args) throws IOException {
@@ -49,7 +49,7 @@ class MapUpdateListener implements Emitter.Listener {
 
             List<Node> nodesToAvoid = getNodesToAvoid(gameMap);
 
-            if (gameMap.getHeroInventory().getGun() == null) {
+            if (hero.getInventory().getGun() == null) {
                 handleSearchForGun(gameMap, player, nodesToAvoid);
             }
 
@@ -74,7 +74,7 @@ class MapUpdateListener implements Emitter.Listener {
     }
 
     private List<Node> getNodesToAvoid(GameMap gameMap) {
-        List<Node> nodes = new ArrayList<>(gameMap.getListObstaclesInit());
+        List<Node> nodes = new ArrayList<>(gameMap.getListIndestructibles());
 
         nodes.removeAll(gameMap.getObstaclesByTag("CAN_GO_THROUGH"));
         nodes.addAll(gameMap.getOtherPlayerInfo());
