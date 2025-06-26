@@ -1,6 +1,7 @@
 import io.socket.emitter.Emitter;
 import jsclub.codefest.sdk.algorithm.PathUtils;
 import jsclub.codefest.sdk.base.Node;
+import jsclub.codefest.sdk.model.Element;
 import jsclub.codefest.sdk.model.GameMap;
 import jsclub.codefest.sdk.Hero;
 import jsclub.codefest.sdk.model.obstacles.Obstacle;
@@ -14,7 +15,7 @@ import java.util.Objects;
 
 public class Main {
     private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
-    private static final String GAME_ID = "112035";
+    private static final String GAME_ID = "148473";
     private static final String PLAYER_NAME = "TraPham";
     private static final String SECRET_KEY = "sk-I66yrGdORXWDWQfpd4qtDA:vVGI_F8vMzFIdjgOH_nnMFp6WkRcYVnXZ9UwiHbPyRqjvTfelockEHJAYgCCZXKax-8jSJCb1HhBGt5ctIUN0A";
 
@@ -30,6 +31,7 @@ class MapUpdateListener implements Emitter.Listener {
     private final InventoryLocal myInventory = new InventoryLocal();
     private final Hero hero;
     private  String targetID = null;
+    private int currentStep = 0;
     public MapUpdateListener(Hero hero) {
         this.hero = hero;
     }
@@ -41,6 +43,7 @@ class MapUpdateListener implements Emitter.Listener {
             GameMap gameMap = hero.getGameMap();
             gameMap.updateOnUpdateMap(args[0]);
             Player player = gameMap.getCurrentPlayer();
+            currentStep++;
             handleGame(gameMap,player);
         } catch (Exception e) {
             System.err.println("Critical error in call method: " + e.getMessage());
@@ -50,8 +53,11 @@ class MapUpdateListener implements Emitter.Listener {
 
     public void handleGame(GameMap gameMap, Player player){
         String decision = getDecisionForNextStep(gameMap, player);
-        System.out.println("=============DEBUG_PART=================");
+        System.out.println("=============DEBUG_PART ("+currentStep+")=================");
         System.out.println("Current Decision is : " + decision);
+        System.out.println("my Inventory gunID has gunID: " + myInventory.getCurrentGunId());
+        String codeFestInvenGunID = hero.getInventory().getGun() !=null? hero.getInventory().getGun().getId(): "null";
+        System.out.println("codefest Inventory has gunID: " + codeFestInvenGunID);
         System.out.println("========================================");
         switch(decision){
             case "loot"-> handleLoot(gameMap, player);
@@ -110,7 +116,7 @@ class MapUpdateListener implements Emitter.Listener {
             }
         }
         catch (Exception e){
-            System.out.println(e);
+            e.printStackTrace();
         }
     }
 
@@ -157,10 +163,14 @@ class MapUpdateListener implements Emitter.Listener {
 
     private List<Node> getNodesToAvoid(GameMap gameMap) {
         List<Node> nodes = new ArrayList<>(gameMap.getListObstaclesUpdate());
+        nodes.removeIf(node ->
+                node instanceof Element && ((Element) node).getId().equalsIgnoreCase("BUSH")
+        );
         for(Obstacle chest: gameMap.getListChests()){
-            nodes.add(new Node(chest.getX(),chest.getY()));
+            if(chest.getHp() >0){
+                nodes.add(new Node(chest.getX(),chest.getY()));
+            }
         }
-        nodes.removeAll(gameMap.getObstaclesByTag("CAN_GO_THROUGH"));
         for(Player p : gameMap.getOtherPlayerInfo()){
             nodes.add(new Node(p.getX(), p.getY()));
         }
