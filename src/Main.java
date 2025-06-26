@@ -56,8 +56,8 @@ class MapUpdateListener implements Emitter.Listener {
         System.out.println("=============DEBUG_PART ("+currentStep+")=================");
         System.out.println("Current Decision is : " + decision);
         System.out.println("my Inventory gunID has gunID: " + myInventory.getCurrentGunId());
-        String codeFestInvenGunID = hero.getInventory().getGun() !=null? hero.getInventory().getGun().getId(): "null";
-        System.out.println("codefest Inventory has gunID: " + codeFestInvenGunID);
+        String codeFestInventGunID = hero.getInventory().getGun() !=null? hero.getInventory().getGun().getId(): "null";
+        System.out.println("CodeFest Inventory has gunID: " + codeFestInventGunID);
         System.out.println("========================================");
         switch(decision){
             case "loot"-> handleLoot(gameMap, player);
@@ -96,10 +96,10 @@ class MapUpdateListener implements Emitter.Listener {
 
     }
 
-    private void handleSearchForGun(GameMap gameMap, Player player, List<Node> nodesToAvoid, Node currenNode) {
+    private void handleSearchForGun(GameMap gameMap, Player player, List<Node> nodesToAvoid, Node currentNode) {
         String pathToGun = findPathToGun(gameMap, nodesToAvoid, player);
         try{
-            if(gameMap.getElementByIndex(currenNode.x,currenNode.y).getId().equalsIgnoreCase(targetID)){
+            if(gameMap.getElementByIndex(currentNode.x,currentNode.y).getId().equalsIgnoreCase(targetID)){
                 for (int i = 0; i < 100; i++) {
                     hero.pickupItem();
                 }
