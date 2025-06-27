@@ -1,8 +1,8 @@
 package myModule;
 
 import jsclub.codefest.sdk.factory.WeaponFactory;
-import jsclub.codefest.sdk.model.equipments.Armor;
-import jsclub.codefest.sdk.model.equipments.HealingItem;
+import jsclub.codefest.sdk.model.armors.Armor;
+import jsclub.codefest.sdk.model.healing_items.HealingItem;
 import jsclub.codefest.sdk.model.weapon.Weapon;
 
 import java.util.ArrayList;

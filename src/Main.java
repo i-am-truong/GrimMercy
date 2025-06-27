@@ -19,7 +19,7 @@ import java.util.function.Predicate;
 
 public class Main {
     private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
-    private static final String GAME_ID = "136423";
+    private static final String GAME_ID = "128046";
     private static final String PLAYER_NAME = "4nim0sity";
     private static final String SECRET_KEY = "sk-I66yrGdORXWDWQfpd4qtDA:vVGI_F8vMzFIdjgOH_nnMFp6WkRcYVnXZ9UwiHbPyRqjvTfelockEHJAYgCCZXKax-8jSJCb1HhBGt5ctIUN0A";
 
@@ -45,6 +45,7 @@ class MapUpdateListener implements Emitter.Listener {
     private boolean[] gocFlags = {true, false, false, false};
     //    to condition
     private List<Player> listPlayerInRangeCloseCombat = new ArrayList<>();
+    private List<Player> listPlayerInRangeShoot = new ArrayList<>();
 
     //    boolean for make Decision:
     private static boolean hyperDodge = false;
@@ -123,9 +124,23 @@ class MapUpdateListener implements Emitter.Listener {
         currentStep++;
         restrictNode = getNodesToAvoid(gameMap);
         listPlayerInRangeCloseCombat = getListPlayerInRangeCloseCombat(gameMap, player);
+        listPlayerInRangeShoot = getListPlayerInRangeShoot(gameMap, player);
     }
+
+    private List<Player> getListPlayerInRangeShoot(GameMap gameMap, Player player) {
+        List<Player> listPlayerInRangeShoot = new ArrayList<>();
+        Node currentNode = new Node(player.getX(), player.getY());
+        List<Player> otherPlayers  = gameMap.getOtherPlayerInfo();
+        for (Player p : otherPlayers) {
+            if (PathUtils.distance(currentNode,new Node(p.getX(),p.getY())) <=2 && p.getHealth()>0) {
+                listPlayerInRangeShoot.add(p);
+            }
+        }
+        return listPlayerInRangeShoot;
+    }
+
     private List<Node> getNodesToAvoid(GameMap gameMap) {
-        List<Node> nodes = new ArrayList<>(gameMap.getListObstaclesInit());
+        List<Node> nodes = new ArrayList<>(gameMap.getListObstacles());
         nodes.removeIf(node ->
                 node instanceof Element && ((Element) node).getId().equalsIgnoreCase("BUSH")
         );
@@ -221,14 +236,7 @@ class MapUpdateListener implements Emitter.Listener {
 //        }
         // end condition of run bo
         //conditon of shoot
-        List<Player> listPlayerInRangeShoot = new ArrayList<>();
-        Node currentNode = new Node(player.getX(), player.getY());
-        List<Player> otherPlayers  = gameMap.getOtherPlayerInfo();
-        for (Player p : otherPlayers) {
-            if (PathUtils.distance(currentNode,new Node(p.getX(),p.getY())) <=2 && p.getHealth()>0) {
-                listPlayerInRangeShoot.add(p);
-            }
-        }
+
         if (!listPlayerInRangeShoot.isEmpty() && myInventory.hasGun()) {
             shouldShoot = true;
             System.out.println("In range shoot ");
@@ -714,44 +722,42 @@ class MapUpdateListener implements Emitter.Listener {
 //        }
 
     }
-    private void handleShoot(GameMap gameMap, Player player) {
-        // copy khối currentPriority == 5
+    private void handleShoot(GameMap gameMap, Player player) throws IOException {
         System.out.println("Vao cau lenh shoot");
-
-        //lay node Of TargetPlayer
-//        Node nodeOfTargetPlayer = null;
-//        if (listPlayerInRangeShoot.size() < 2) {// danh 1 vs 1
-//            savedName = listPlayerInRangeCloseCombat.getFirst().getPlayerName();
-//            savedTarget = listPlayerInRangeCloseCombat.getFirst();
-//            nodeOfTargetPlayer = new Node(listPlayerInRangeShoot.get(0).getX(),listPlayerInRangeShoot.get(0).getY());
-//        } else {// combat nhieu nguoi
-//            //danh thang thap mau nhat
-//            int lowestHp = Integer.MAX_VALUE;
-//            System.out.println("--------------");
-//            System.out.println("list Player in range shoot");
-//            for (Player p : listPlayerInRangeShoot ) {
-//                System.out.println("Name: " + p.getPlayerName());
-//                System.out.println("HP: "+ p.getHp());
-//                if(p.getHp() < lowestHp){
-//                    savedName=p.getPlayerName();
-//                    savedTarget=p;
-//                    lowestHp = p.getHp();
-//                    nodeOfTargetPlayer = new Node(p.getX(),p.getY());
-//                }
-//            }
-//            System.out.println("--------------");
-//        }
-//        restrictedNodes.remove(savedTarget);
-//        String direction = getCloseCombatDirection(currentNode, nodeOfTargetPlayer);
-//        if (direction.equalsIgnoreCase("planB")) {
-//            hero.move(PathUtils.getShortestPath(gameMap, restrictedNodes, currentNode, nodeOfTargetPlayer, false));
-//        } else {
-//            hero.shoot(direction);
-//            NumBullet--;
-//            System.out.println("hero shoot at: "+ currentStep);
-//            ShootcountDown = 2;
-//            canShoot = false;
-//        }
+        Node currentNode = new Node(player.getX(),player.getY());
+//        lay node Of TargetPlayer
+        Node nodeOfTargetPlayer = null;
+        if (listPlayerInRangeShoot.size() < 2) {// danh 1 vs 1
+            savedName = listPlayerInRangeCloseCombat.getFirst().getID();
+            savedTarget = listPlayerInRangeCloseCombat.getFirst();
+            nodeOfTargetPlayer = new Node(listPlayerInRangeShoot.getFirst().getX(),listPlayerInRangeShoot.getFirst().getY());
+        } else {// combat nhieu nguoi
+            //danh thang thap mau nhat
+            float lowestHp = Integer.MAX_VALUE;
+            System.out.println("--------------");
+            System.out.println("list Player in range shoot");
+            for (Player p : listPlayerInRangeShoot ) {
+                System.out.println("Name: " + p.getID());
+                System.out.println("HP: "+ p.getHealth());
+                if(p.getHealth() < lowestHp){
+                    savedName=p.getID();
+                    savedTarget=p;
+                    lowestHp = p.getHealth();
+                    nodeOfTargetPlayer = new Node(p.getX(),p.getY());
+                }
+            }
+            System.out.println("--------------");
+        }
+        restrictNode.remove(savedTarget);
+        String direction = getCloseCombatDirection(currentNode, nodeOfTargetPlayer);
+        if (direction.equalsIgnoreCase("planB")) {
+            hero.move(PathUtils.getShortestPath(gameMap, restrictNode, currentNode, nodeOfTargetPlayer, false));
+        } else {
+            hero.shoot(direction);
+            System.out.println("hero shoot at: "+ currentStep);
+            ShootcountDown = 2;
+            canShoot = false;
+        }
 
     }
 
