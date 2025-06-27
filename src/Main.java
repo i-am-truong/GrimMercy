@@ -19,7 +19,7 @@ import java.util.function.Predicate;
 
 public class Main {
     private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
-    private static final String GAME_ID = "128046";
+    private static final String GAME_ID = "141096";
     private static final String PLAYER_NAME = "4nim0sity";
     private static final String SECRET_KEY = "sk-I66yrGdORXWDWQfpd4qtDA:vVGI_F8vMzFIdjgOH_nnMFp6WkRcYVnXZ9UwiHbPyRqjvTfelockEHJAYgCCZXKax-8jSJCb1HhBGt5ctIUN0A";
 
@@ -46,6 +46,7 @@ class MapUpdateListener implements Emitter.Listener {
     //    to condition
     private List<Player> listPlayerInRangeCloseCombat = new ArrayList<>();
     private List<Player> listPlayerInRangeShoot = new ArrayList<>();
+    private List<Player> listPlayerInRangeThrow = new ArrayList<>();
 
     //    boolean for make Decision:
     private static boolean hyperDodge = false;
@@ -121,10 +122,24 @@ class MapUpdateListener implements Emitter.Listener {
 
     }
     public void setUpStartGame(GameMap gameMap,Player player){
+
         currentStep++;
         restrictNode = getNodesToAvoid(gameMap);
         listPlayerInRangeCloseCombat = getListPlayerInRangeCloseCombat(gameMap, player);
         listPlayerInRangeShoot = getListPlayerInRangeShoot(gameMap, player);
+        listPlayerInRangeThrow = getListPlayerInRangeThrow(gameMap,player);
+    }
+
+    private List<Player> getListPlayerInRangeThrow(GameMap gameMap, Player player) {
+        List<Player> listPlayerInRangeThrow = new ArrayList<>();
+        Node currentNode = new Node(player.getX(), player.getY());
+        List<Player> otherPlayers  = gameMap.getOtherPlayerInfo();
+        for (Player p : otherPlayers) {
+            if (PathUtils.distance(currentNode, new Node(p.getX(),p.getY())) <=10 && p.getHealth()>0) {
+                listPlayerInRangeThrow.add(p);
+            }
+        }
+        return listPlayerInRangeThrow;
     }
 
     private List<Player> getListPlayerInRangeShoot(GameMap gameMap, Player player) {
@@ -236,6 +251,15 @@ class MapUpdateListener implements Emitter.Listener {
 //        }
         // end condition of run bo
         //conditon of shoot
+        //dieu kien throw
+
+        if(!listPlayerInRangeThrow.isEmpty() && myInventory.hasThrowable()){
+            System.out.println("In range throw");
+            shouldThrow = true;
+        }else{
+            shouldThrow = false;
+        }
+        //end condition of throw
 
         if (!listPlayerInRangeShoot.isEmpty() && myInventory.hasGun()) {
             shouldShoot = true;
@@ -693,35 +717,58 @@ class MapUpdateListener implements Emitter.Listener {
 //        }
 
     }
-    private void handleThrowBomb(GameMap gameMap, Player player) {
-        // copy logic throw (priority 4)
-//        System.out.println("Vao cau lenh throw");
-//        boolean deploy = false;
-//        for (Player target : listPlayerInRangeThrow) {
-//            if (!getThrowDirection(currentNode, new Node(target.x, target.y)).equalsIgnoreCase("planB")) {
-//                hero.throwItem(getThrowDirection(currentNode, new Node(target.x, target.y)));
-//                hasThrow=false;
-//                deploy = true;
-//            }
-//        }
-//        if (!deploy) {
-//            Node food = null;
-//            int lowestHp = Integer.MAX_VALUE;
-//            System.out.println("--------------");
-//            System.out.println("list Player in range throw");
-//            for (Player p : listPlayerInRangeThrow) {
-//                System.out.println("Name: " + p.getPlayerName());
-//                System.out.println("HP: " + p.getHp());
-//                if (p.getHp() < lowestHp) {
-//                    lowestHp = p.getHp();
-//                    food = p;
-//                }
-//            }
-//            System.out.println("Khong nem duoc, tiep tuc thuc hien hanh dong truoc:");
-//            currentPriority = prePriority;
-//        }
+    private void handleThrowBomb(GameMap gameMap, Player player) throws IOException {
+        System.out.println("Vao cau lenh throw");
+        Node currentNode = new Node(player.getX(),player.getY());
+        boolean deploy = false;
+        for (Player target : listPlayerInRangeThrow) {
+            if (!getThrowDirection(currentNode, new Node(target.x, target.y)).equalsIgnoreCase("planB")) {
+                int distanceToEnemy = PathUtils.distance(currentNode,new Node(target.x, target.y));
+                hero.throwItem(getThrowDirection(currentNode, new Node(target.x, target.y)),distanceToEnemy);
+                myHero.revokeItem(myInventory.getThrowable().getId());
+                deploy = true;
+            }
+        }
+        if (!deploy) {
+            Node food = null;
+            float lowestHp = Integer.MAX_VALUE;
+            System.out.println("--------------");
+            System.out.println("list Player in range throw");
+            for (Player p : listPlayerInRangeThrow) {
+                System.out.println("Name: " + p.getID());
+                System.out.println("HP: " + p.getHealth());
+                if (p.getHealth() < lowestHp) {
+                    lowestHp = p.getHealth();
+                    food = p;
+                }
+            }
+            System.out.println("Khong nem duoc, tiep tuc thuc hien hanh dong truoc:");
+        }
 
     }
+    private static String getThrowDirection(Node playerNode, Node enemyNode) {
+        int x = playerNode.getX();
+        int y = playerNode.getY();
+        int x1 = enemyNode.getX();
+        int y1 = enemyNode.getY();
+        if (Math.abs(x - x1) >= 10 || Math.abs(y - y1) >= 10) {
+            return "planB";
+        }
+        if (Math.abs(x - x1) <= 1 && (-5 > y - y1 && y - y1 >= -10)) {
+            return "u";
+        }
+        if (Math.abs(x - x1) <= 1 && (10 >= y - y1 && y - y1 > 5)) {
+            return "d";
+        }
+        if (Math.abs(y - y1) <= 1 && (10 >= x - x1 && x - x1 > 5)) {
+            return "l";
+        }
+        if (Math.abs(y - y1) <= 1 && (-5 > x - x1 && x - x1 >= -10)) {
+            return "r";
+        }
+        return "planB";
+    }
+
     private void handleShoot(GameMap gameMap, Player player) throws IOException {
         System.out.println("Vao cau lenh shoot");
         Node currentNode = new Node(player.getX(),player.getY());
