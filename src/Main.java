@@ -738,7 +738,7 @@ class MapUpdateListener implements Emitter.Listener {
     ) {
         addTargetsFromList(items, toNode, map, outTargets, item -> true);
     }
-
+  
     private <T> void addTargetsFromList(
             List<T> items,
             Function<T, Node> toNode,
