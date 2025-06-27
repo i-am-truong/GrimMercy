@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="CodeFest">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/../../CodeFest.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
