@@ -205,6 +205,38 @@ class MapUpdateListener implements Emitter.Listener {
         if (!myInventory.hasMelee()&&myInventory.hasGun()&&canShoot){
             hyperDodge=false;
         }
+        // condition of run bo
+//        gameMap.getSafeZone()
+//        if (realSize != darksize) {
+//            if ((y > (darksize / 8 + 1) * 8 && y < (mapSize - (darksize / 8 + 1) * 8) && x > (darksize / 8 + 1) * 8 && x < (mapSize - (darksize / 8 + 1) * 8)) || (x > realSize + 3 && x < mapSize - realSize - 3 && y > realSize + 3 && y < mapSize - realSize - 3)) {
+//                //safe
+//            } else {
+//                shouldRunBo = true;
+//                System.out.println("run now");
+//                countBo = 8;
+//                canHeal = false;
+//                HealcountDown = 8;
+//            }
+//            darksize = realSize;
+//        }
+        // end condition of run bo
+        //conditon of shoot
+        List<Player> listPlayerInRangeShoot = new ArrayList<>();
+        Node currentNode = new Node(player.getX(), player.getY());
+        List<Player> otherPlayers  = gameMap.getOtherPlayerInfo();
+        for (Player p : otherPlayers) {
+            if (PathUtils.distance(currentNode,new Node(p.getX(),p.getY())) <=2 && p.getHealth()>0) {
+                listPlayerInRangeShoot.add(p);
+            }
+        }
+        if (!listPlayerInRangeShoot.isEmpty() && myInventory.hasGun()) {
+            shouldShoot = true;
+            System.out.println("In range shoot ");
+        }else{
+            shouldShoot = false;
+        }
+        //end condition of shoot
+
         // loot condition
         if(myInventory.getListHealingItem().toArray().length < 4 ||
                 !myInventory.hasMelee() ||
@@ -212,6 +244,7 @@ class MapUpdateListener implements Emitter.Listener {
                 !(myInventory.hasHelmet()|| myInventory.hasArmor()) ){
             shouldLoot = true;
         }
+        //close combat condition
         if (listPlayerInRangeCloseCombat!= null &&!listPlayerInRangeCloseCombat.isEmpty()) {
             shouldCloseCombat = true;
             System.out.println("close combat");
