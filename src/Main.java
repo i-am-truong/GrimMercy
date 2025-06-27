@@ -19,7 +19,7 @@ import java.util.function.Predicate;
 
 public class Main {
     private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
-    private static final String GAME_ID = "175449";
+    private static final String GAME_ID = "136423";
     private static final String PLAYER_NAME = "4nim0sity";
     private static final String SECRET_KEY = "sk-I66yrGdORXWDWQfpd4qtDA:vVGI_F8vMzFIdjgOH_nnMFp6WkRcYVnXZ9UwiHbPyRqjvTfelockEHJAYgCCZXKax-8jSJCb1HhBGt5ctIUN0A";
 
@@ -35,11 +35,16 @@ class MapUpdateListener implements Emitter.Listener {
     private final InventoryLocal myInventory = new InventoryLocal();
     private final LocalHeroController myHero = new LocalHeroController(myInventory);
     private final Hero hero;
-//    private String targetID = null;
     private int currentStep = 0;
-    List<Node> restrictNode = new ArrayList<>();
+    private List<Node> restrictNode = new ArrayList<>();
+
+    private static Player savedTarget = null;
+    private static String savedName = null;
+
     private static Node currentNodeTarget = null;
     private boolean[] gocFlags = {true, false, false, false};
+    //    to condition
+    private List<Player> listPlayerInRangeCloseCombat = new ArrayList<>();
 
     //    boolean for make Decision:
     private static boolean hyperDodge = false;
@@ -52,8 +57,8 @@ class MapUpdateListener implements Emitter.Listener {
     boolean shouldDodge = false;
     boolean shouldThrow = false;
 
-    private boolean canAttack = true;
-    private int AttackcountDown = 0;
+    public boolean canAttack = true;
+    public int AttackcountDown = 0;
 
     private boolean canHeal = false;
     private int HealcountDown = 0;
@@ -80,8 +85,9 @@ class MapUpdateListener implements Emitter.Listener {
         }
     }
 
-    public void handleGame(GameMap gameMap, Player player) {
-        setUpStartGame(gameMap);
+    public void handleGame(GameMap gameMap, Player player) throws IOException {
+        setUpStartGame(gameMap,player);
+        updateCondition(gameMap, player);
         String decision = getDecisionForNextStep(gameMap, player);
         switch (decision) {
             case "die" -> handleDie();
@@ -104,10 +110,19 @@ class MapUpdateListener implements Emitter.Listener {
     }
     public void handleDie(){
         myInventory.reset();
+        canHeal = false;
+        HealcountDown = 0;
+        canAttack = true;
+        AttackcountDown = 0;
+        canShoot = false;
+        ShootcountDown = 0;
+
+
     }
-    public void setUpStartGame(GameMap gameMap){
+    public void setUpStartGame(GameMap gameMap,Player player){
         currentStep++;
         restrictNode = getNodesToAvoid(gameMap);
+        listPlayerInRangeCloseCombat = getListPlayerInRangeCloseCombat(gameMap, player);
     }
     private List<Node> getNodesToAvoid(GameMap gameMap) {
         List<Node> nodes = new ArrayList<>(gameMap.getListObstaclesInit());
@@ -124,10 +139,89 @@ class MapUpdateListener implements Emitter.Listener {
         }
         return nodes;
     }
+    private  List<Player> getListPlayerInRangeCloseCombat(GameMap gameMap,Player player){
+        List<Player> otherPlayers = gameMap.getOtherPlayerInfo();
+        Node currentNode = new Node(player.getX(),player.getY());
+        List<Player> listResult = new ArrayList<>();
+        for (Player p : otherPlayers) {
+            if (myInventory.hasMelee()&&PathUtils.distance(currentNode,new Node(p.getX(),p.getY())) <=5 && p.getHealth()>0) {
+                listResult.add(p);
+                restrictNode.add(new Node(p.x,p.y+2));
+                restrictNode.add(new Node(p.x,p.y+3));
+                //restrictedNodes.add(new Node(p.x,p.y+4));
+                restrictNode.add(new Node(p.x,p.y-2));
+                restrictNode.add(new Node(p.x,p.y-3));
+                //restrictedNodes.add(new Node(p.x,p.y-4));
+                restrictNode.add(new Node(p.x+2,p.y));
+                restrictNode.add(new Node(p.x+3,p.y));
+                //restrictedNodes.add(new Node(p.x+4,p.y));
+                restrictNode.add(new Node(p.x-2,p.y));
+                restrictNode.add(new Node(p.x-3,p.y));
+                //restrictedNodes.add(new Node(p.x-4,p.y));
+            }
+            if (!myInventory.hasMelee()&&currentStep<85&&PathUtils.distance(currentNode,new Node(p.getX(),p.getY())) <=4 && p.getHealth()>0) {
+                listResult.add(p);
+                restrictNode.add(new Node(p.x,p.y+2));
+                restrictNode.add(new Node(p.x,p.y+3));
+                //restrictedNodes.add(new Node(p.x,p.y+4));
+                restrictNode.add(new Node(p.x,p.y-2));
+                restrictNode.add(new Node(p.x,p.y-3));
+                //restrictedNodes.add(new Node(p.x,p.y-4));
+                restrictNode.add(new Node(p.x+2,p.y));
+                restrictNode.add(new Node(p.x+3,p.y));
+                //restrictedNodes.add(new Node(p.x+4,p.y));
+                restrictNode.add(new Node(p.x-2,p.y));
+                restrictNode.add(new Node(p.x-3,p.y));
+                //restrictedNodes.add(new Node(p.x-4,p.y));
+            }
+        }
+        return listResult;
+    }
+
+    public void updateCondition(GameMap gameMap, Player player){
+
+        if(HealcountDown != 0){
+            HealcountDown --;
+        }
+        if(HealcountDown == 0  && myInventory.getHealIds()[0] != null){
+            canHeal = true;
+        }else{
+            canHeal = false;
+        }
+
+        if(ShootcountDown != 0){
+            ShootcountDown--;
+        }
+        if(ShootcountDown == 0 && myInventory.hasGun()){
+            canShoot = true;
+        }
+        if(AttackcountDown != 0){
+            AttackcountDown --;
+        }
+        if(AttackcountDown == 0){
+            hyperDodge = false;
+            canAttack = true;
+        }
+        if (!myInventory.hasMelee()&&myInventory.hasGun()&&canShoot){
+            hyperDodge=false;
+        }
+        // loot condition
+        if(myInventory.getListHealingItem().toArray().length < 4 ||
+                !myInventory.hasMelee() ||
+                !myInventory.hasGun() ||
+                !(myInventory.hasHelmet()|| myInventory.hasArmor()) ){
+            shouldLoot = true;
+        }
+        if (listPlayerInRangeCloseCombat!= null &&!listPlayerInRangeCloseCombat.isEmpty()) {
+            shouldCloseCombat = true;
+            System.out.println("close combat");
+        }else{
+            shouldCloseCombat = false;
+        }
+
+    }
 
     public String getDecisionForNextStep(GameMap gameMap, Player player) {
-        //retrun loot for testing:
-        if(true) return "loot";
         if (player == null || player.getHealth() <= 0) {
             return "die";
         }
@@ -324,79 +418,84 @@ class MapUpdateListener implements Emitter.Listener {
 //        }
 
     }
-    private void handleCloseCombat(GameMap gameMap, Player player) {
-        // copy nguyên khối currentPriority == 1
+    private void handleCloseCombat(GameMap gameMap, Player player) throws IOException {
+        Node currentNode = new Node(player.getX(),player.getY());
         System.out.println("Vao cau lenh close combat");
+        Node nodeOfTargetPlayer = null;
+        if (listPlayerInRangeCloseCombat.size() < 2) {// danh 1 vs 1
+            System.out.println(listPlayerInRangeCloseCombat);
+            savedName = listPlayerInRangeCloseCombat.getFirst().getID();
+            savedTarget = listPlayerInRangeCloseCombat.getFirst();
+            nodeOfTargetPlayer = new Node(listPlayerInRangeCloseCombat.getFirst().getX(),listPlayerInRangeCloseCombat.getFirst().getY());
+        } else {// combat nhieu nguoi
+            //danh thang thap mau nhat
+            float lowestHp = Integer.MAX_VALUE;
+            System.out.println("--------------");
+            System.out.println("list Player in range ");
+            for (Player p : listPlayerInRangeCloseCombat ) {
+                System.out.println("Name: " + p.getID());
+                System.out.println("HP: "+ p.getHealth());
+                if(p.getHealth() < lowestHp){
+                    lowestHp = p.getHealth();
+                    nodeOfTargetPlayer = new Node(p.getX(),p.getY());
+                    savedName = p.getID();
+                    savedTarget = p;
+                }
+            }
+            System.out.println("--------------");
+        }
+        restrictNode.remove(savedTarget);
 
-        //lay node Of TargetPlayer
-//        Node nodeOfTargetPlayer = null;
-//        if (listPlayerInRangeCloseCombat.size() < 2) {// danh 1 vs 1
-//            savedName = listPlayerInRangeCloseCombat.get(0).getPlayerName();
-//            savedTarget = listPlayerInRangeCloseCombat.get(0);
-//            nodeOfTargetPlayer = new Node(listPlayerInRangeCloseCombat.get(0).getX(),listPlayerInRangeCloseCombat.get(0).getY());
-//        } else {// combat nhieu nguoi
-//            //danh thang thap mau nhat
-//            int lowestHp = Integer.MAX_VALUE;
-//            System.out.println("--------------");
-//            System.out.println("list Player in range ");
-//            for (Player p : listPlayerInRangeCloseCombat ) {
-//                System.out.println("Name: " + p.getPlayerName());
-//                System.out.println("HP: "+ p.getHp());
-//                if(p.getHp() < lowestHp){
-//                    lowestHp = p.getHp();
-//                    nodeOfTargetPlayer = new Node(p.getX(),p.getY());
-//                    savedName = p.getPlayerName();
-//                    savedTarget = p;
-//                }
-//            }
-//            System.out.println("--------------");
-//        }
-//        restrictedNodes.remove(savedTarget);
-//
-//        String direction = getCloseCombatDirection(currentNode, nodeOfTargetPlayer);
-//        if (direction.equalsIgnoreCase("planB")) {
-//            System.out.println("Plan B in close combat is implementing");
-//            System.out.println("Path to enemy: " +PathUtils.getShortestPath(gameMap, restrictedNodes, currentNode, nodeOfTargetPlayer, false));
-//            hero.move(PathUtils.getShortestPath(gameMap, restrictedNodes, currentNode, nodeOfTargetPlayer, false));
-//            if(PathUtils.getShortestPath(gameMap, restrictedNodes, currentNode, nodeOfTargetPlayer, false) == null){
-//                System.out.println("Tam thoi di chuyen trong 3 step toi tranh loi");
-//                canAttack = false;
-//                AttackcountDown = 3;
-//            }
-//        } else {
-//            System.out.println("hero attack at: "+ currentStep);
-//            System.out.println("current melee is: "+ inventory.getMelee());
-//            hero.attack(direction);
-//            if(hasGun && inventory.getMelee().getCooldown() >1){
-//                if(inventory.getMelee().getId().equalsIgnoreCase("LIGHT_SABER")){
-//                    AttackcountDown = 2;
-//                }else{
-//                    AttackcountDown = 2;
-//                }
-//                canAttack = false;
-//            }
-//            if(hasGun && inventory.getMelee().getCooldown() <=1){
-//                System.out.println("danh 1 cai xong ban");
-//                AttackcountDown = 2;
-//                canAttack = false;
-//            }
-//            if(!hasGun && (IDCurrentMelee.equalsIgnoreCase("BROOM")
-//                    ||IDCurrentMelee.equalsIgnoreCase("SANDAL") )){
-//                AttackcountDown = 6;
-//                hyperDodge = true;
-//                canAttack = false;
-//            }
-//            if(!hasGun && (IDCurrentMelee.equalsIgnoreCase("LIGHT_SABER"))){
-//                AttackcountDown = 8;
-//                hyperDodge = true;
-//                canAttack = false;
-//            }
-//
-//
-//        }
+        String direction = getCloseCombatDirection(currentNode, nodeOfTargetPlayer);
+        if (direction.equalsIgnoreCase("planB")) {
+            System.out.println("Plan B in close combat is implementing");
+            System.out.println("Path to enemy: " +PathUtils.getShortestPath(gameMap, restrictNode, currentNode, nodeOfTargetPlayer, false));
+            hero.move(PathUtils.getShortestPath(gameMap, restrictNode, currentNode, nodeOfTargetPlayer, false));
+            if(PathUtils.getShortestPath(gameMap, restrictNode, currentNode, nodeOfTargetPlayer, false) == null){
+                System.out.println("Tam thoi di chuyen trong 3 step toi tranh loi");
+                canAttack = false;
+                AttackcountDown = 3;
+            }
+        } else {
+            System.out.println("hero attack at: "+ currentStep);
+            hero.attack(direction);
+            if(myInventory.hasGun() && myInventory.hasMelee()){
+                System.out.println("danh 1 cai xong ban");
+                AttackcountDown = 2;
+                canAttack = false;
+            }
+            if(!myInventory.hasGun() && myInventory.hasMelee()){
+                AttackcountDown = Double.valueOf(Math.ceil(myInventory.getMelee().getCooldown())).intValue();
+                hyperDodge = true;
+                canAttack = false;
+            }
+        }
 
     }
+    private static String getCloseCombatDirection(Node playerNode, Node enemyNode) {
+        int x = playerNode.getX();
+        int y = playerNode.getY();
+        int x1 = enemyNode.getX();
+        int y1 = enemyNode.getY();
+        if (Math.abs(x - x1) > 1 || Math.abs(y - y1) > 1) {
+            return "planB";
+        }
+        if (x - x1 == 0 && y - y1 < 0) {
+            return "u";
+        }
+        if (x - x1 == 0 && y - y1 > 0) {
+            return "d";
+        }
+        if (x - x1 > 0 && y - y1 == 0) {
+            return "l";
+        }
+        if (x - x1 < 0 && y - y1 == 0) {
+            return "r";
+        }
+        return "planB";
+    }
     private void handleDodgeBullet(GameMap gameMap, Player player) {
+
         // copy nguyên khối currentPriority == 2
         System.out.println("ne ne");
 //                        if (!gameMap.getElementByIndex(x, y + 1).getType().name().equalsIgnoreCase("road")) {
@@ -721,6 +820,9 @@ class MapUpdateListener implements Emitter.Listener {
         if (!myInventory.hasThrowable()) {
             addTargetsFromList(map.getAllThrowable(), w -> new Node(w.getX(), w.getY()), map, targets);
         }
+        if(!myInventory.hasSpecial()){
+            addTargetsFromList(map.getAllSpecial(), w -> new Node(w.getX(), w.getY()), map, targets);
+        }
 
 
         if (!myInventory.hasGun() || !myInventory.hasMelee() || !myInventory.hasThrowable() || !myInventory.hasHelmet() || !myInventory.hasArmor() || myInventory.getHealIds()[3] == null) {
@@ -796,17 +898,6 @@ class MapUpdateListener implements Emitter.Listener {
         return result;
     }
 
-    /**
-     * Tìm đường đi “tốt nhất”:
-     *   - Ưu tiên tới các node trong targets
-     *   - Nếu không tới được, chạy trốn/quay góc map
-     *
-     * @param map            gameMap hiện tại
-     * @param current        node hiện tại
-     * @param targets        list các node muốn tới (đã generate bởi collectLootTargets)
-     * @param otherPlayers   list Player khác để bổ sung avoid nếu cần
-     * @return chuỗi directions (vd "rruuld...") hoặc null nếu hoàn toàn không tìm được
-     */
     public String findBestPath(
             GameMap map,
             Node current,
@@ -814,7 +905,6 @@ class MapUpdateListener implements Emitter.Listener {
             List<Player> otherPlayers
 
     ) {
-        // 1) Thử theo từng target
         int minDistance = Integer.MAX_VALUE;
         String path = null;
         for (Node tgt : targets) {
@@ -854,10 +944,6 @@ class MapUpdateListener implements Emitter.Listener {
         }
         return escapePath;
     }
-
-    /**
-     * Helper thử tính path đến khoảng (tx,ty) – một điểm ở “góc”.
-     */
     private String tryCorner(
             GameMap map,
             List<Node> restricted,
@@ -868,15 +954,6 @@ class MapUpdateListener implements Emitter.Listener {
         return PathUtils.getShortestPath(map, restricted, current, corner, false);
     }
 
-
-    /**
-     * Thực thi move hoặc loot/attack khi không còn path.
-     *
-     * @param map       gameMap hiện tại
-     * @param current   node hiện tại của player
-     * @param path      chuỗi directions (vd "urddl") hoặc null
-     * @return true nếu đã thực hiện move; false nếu đã xử lý loot/attack hoặc không làm gì
-     */
     public boolean executePathOrLoot(
             GameMap map,
             Node current,
@@ -888,7 +965,7 @@ class MapUpdateListener implements Emitter.Listener {
             try {
                 Element elem = map.getElementByIndex(x, y);
                 if (elem != null) {
-                    for (int i = 0; i < 1000; i++) {
+                    for (int i = 0; i < 10; i++) {
                         hero.pickupItem();
                     }
                     myHero.pickupItem(elem.getId());
@@ -941,27 +1018,6 @@ class MapUpdateListener implements Emitter.Listener {
                     else            dir = "d";  // chest phía dưới
                     hero.attack(dir);
                     // nếu chỉ muốn đánh 1 lần/chest, có thể break ở đây
-                }
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-
-    void attackAdjacentChestsNoId(GameMap gameMap, int px, int py) {
-        try {
-            for (Obstacle chest : gameMap.getListChests()) {
-                if (chest.getHp() <= 0) continue;
-                int dx = chest.getX() - px;
-                int dy = chest.getY() - py;
-                if (Math.abs(dx) + Math.abs(dy) == 1) {
-                    String dir;
-                    if (dx ==  1) dir = "r";  // chest bên phải
-                    else if (dx == -1) dir = "l";  // chest bên trái
-                    else if (dy ==  1) dir = "u";  // chest phía trên
-                    else            dir = "d";  // chest phía dưới
-                    hero.attack(dir);
                 }
             }
         } catch (IOException e) {

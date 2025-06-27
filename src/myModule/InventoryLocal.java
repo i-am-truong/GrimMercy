@@ -73,6 +73,7 @@ public class InventoryLocal {
         return this.armor != null;
     }
 
+    public boolean hasSpecial(){return this.special != null;}
     public String[] getHealIds() {
         String[] ids = new String[4];
         for (int i = 0; i < listHealingItem.size() && i < 4; i++) {
@@ -91,7 +92,7 @@ public class InventoryLocal {
         this.setSpecial((Weapon)null);
         this.setArmor((Armor)null);
         this.setHelmet((Armor)null);
-        this.setListHealingItem((List)null);
+        this.listHealingItem = new ArrayList<>();
     }
 
     @Override
