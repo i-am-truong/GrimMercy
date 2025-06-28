@@ -9,6 +9,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class InventoryLocal {
+    private int bullet = 0;
+    private int numberThrow = 0;
     private Weapon gun;
     private Weapon melee = WeaponFactory.getWeaponById("HAND");
     private Weapon throwable;
@@ -22,6 +24,18 @@ public class InventoryLocal {
     }
     public void setGun(Weapon gun) {
         this.gun = gun;
+        if(gun != null){
+            bullet = gun.getUseCounts();
+        }
+    }
+    public int getBullet(){
+        if(hasGun()){
+            return this.bullet;
+        }
+        return 0;
+    }
+    public void setBullet(int bullet){
+        this.bullet = bullet;
     }
     public Weapon getMelee() {
         return this.melee;
@@ -32,6 +46,18 @@ public class InventoryLocal {
     }
     public void setThrowable(Weapon throwable) {
         this.throwable = throwable;
+        if(throwable != null){
+            numberThrow = throwable.getUseCounts();
+        }
+    }
+    public int getNumberThrow(){
+        if(hasThrowable()){
+            return  numberThrow;
+        }
+        return 0;
+    }
+    public void setNumberThrow(int numberThrow){
+        this.numberThrow = numberThrow;
     }
     public Weapon getSpecial() {
         return this.special;

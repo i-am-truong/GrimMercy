@@ -78,6 +78,13 @@ public class LocalHeroController {
         return false;
     }
 
+    public void shoot(){
+        inv.setBullet(inv.getBullet()-1);
+    }
+    public void throwItem(){
+        inv.setNumberThrow(inv.getNumberThrow()-1);
+    }
+
     /**
      * Drop (revoke) item: xóa khỏi bất kỳ slot hoặc list nào chứa itemId.
      */
