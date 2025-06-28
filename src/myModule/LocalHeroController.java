@@ -47,9 +47,38 @@ public class LocalHeroController {
             return;
         }
 
-        // 2) HealingItem?
+        // 2) HealingItem? (tối đa 2 healing, 2 special)
         HealingItem hi = HealingItemFactory.getHealingItemById(itemId);
         if (hi != null) {
+            // Danh sách id cho healing và special
+            java.util.List<String> listHealing = java.util.Arrays.asList(
+                "GOD_LEAF", "SPIRIT_TEAR", "MERMAID_TAIL", "PHOENIX_FEATHERS", "UNICORN_BLOOD"
+            );
+            java.util.List<String> listSpecial = java.util.Arrays.asList(
+                "ELIXIR", "MAGIC", "ELIXIR_OF_LIFE", "COMPASS"
+            );
+            int healingCount = (int) inv.getListHealingItem().stream()
+                .filter(i -> listHealing.contains(i.getId()))
+                .count();
+            int specialCount = (int) inv.getListHealingItem().stream()
+                .filter(i -> listSpecial.contains(i.getId()))
+                .count();
+
+            if (listHealing.contains(hi.getId())) {
+                if (healingCount < 2) {
+                    inv.getListHealingItem().add(hi);
+                }
+                // Nếu đã đủ 2 thì không thêm nữa
+                return;
+            }
+            if (listSpecial.contains(hi.getId())) {
+                if (specialCount < 2) {
+                    inv.getListHealingItem().add(hi);
+                }
+                // Nếu đã đủ 2 thì không thêm nữa
+                return;
+            }
+            // Các loại khác thì cứ nhặt
             inv.getListHealingItem().add(hi);
             return;
         }
@@ -134,4 +163,3 @@ public class LocalHeroController {
         }
     }
 }
-
