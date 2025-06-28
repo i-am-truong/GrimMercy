@@ -5,6 +5,7 @@ import jsclub.codefest.sdk.model.Element;
 import jsclub.codefest.sdk.model.GameMap;
 import jsclub.codefest.sdk.Hero;
 import jsclub.codefest.sdk.model.Inventory;
+import jsclub.codefest.sdk.model.healing_items.HealingItem;
 import jsclub.codefest.sdk.model.npcs.Enemy;
 import jsclub.codefest.sdk.model.obstacles.Obstacle;
 import jsclub.codefest.sdk.model.players.Player;
@@ -21,7 +22,7 @@ import java.util.function.Predicate;
 
 public class Main {
     private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
-    private static final String GAME_ID = "171112";
+    private static final String GAME_ID = "136586";
     private static final String PLAYER_NAME = "4nim0sity";
     private static final String SECRET_KEY = "sk-QF0trYSgT-uH8Ts5r2GjgQ:77yjD6Bql9CmfVeDElVtLKjigvaSViW4KH_UhnbER4zzDECm1Iy7E9CNAdjU8rqcbVP9eNAznl2JyV1UzHSCPA";
     public static void main(String[] args) throws IOException {
@@ -643,7 +644,7 @@ class MapUpdateListener implements Emitter.Listener {
         }
     }
 
-    public void handleLoot(GameMap gameMap, Player player){
+    public void handleLoot(GameMap gameMap, Player player) throws IOException {
         Node currentNode = new Node(player.getX(), player.getY());
         List<Node> targets = collectLootTargets(
                 gameMap,
@@ -662,6 +663,21 @@ class MapUpdateListener implements Emitter.Listener {
                 path
         );
     }
+
+    // Danh sách id cho healing và special
+    private static final List<String> listHealing = Arrays.asList(
+            "GOD_LEAF",
+            "SPIRIT_TEAR",
+            "MERMAID_TAIL",
+            "PHOENIX_FEATHERS",
+            "UNICORN_BLOOD"
+    );
+    private static final List<String> listSpecial = Arrays.asList(
+            "ELIXIR",
+            "MAGIC",
+            "ELIXIR_OF_LIFE",
+            "COMPASS"
+    );
     public List<Node> collectLootTargets(
             GameMap map,
             Node current
@@ -678,14 +694,44 @@ class MapUpdateListener implements Emitter.Listener {
             return targets;
         }
 
-        if (hero.getInventory().getListHealingItem().size() <4) {
-            addTargetsFromList(
-                    map.getListHealingItems(),
-                    item -> new Node(item.getX(), item.getY()),
-                    map,
-                    targets
-            );
+
+       // 2) Tối ưu lấy Healing/Special (4 slot tổng, tối đa 2 mỗi loại)
+        if (hero.getInventory().getListHealingItem().size() < 4) {
+            // 1. Đếm số Healing và Special đã có trong túi
+            int haveHealing = 0;
+            int haveSpecial = 0;
+            for (HealingItem h : hero.getInventory().getListHealingItem()) {
+                String hid = h.getId();
+                if (listHealing.contains(hid)) {
+                    haveHealing++;
+                } else if (listSpecial.contains(hid)) {
+                    haveSpecial++;
+                }
+            }
+
+            // 2. Duyệt qua tất cả HealingItem trên map
+            for (HealingItem item : map.getListHealingItems()) {
+                String id = item.getId();
+                Node n = new Node(item.getX(), item.getY());
+
+                // Chỉ xét trong vùng an toàn
+                if (!PathUtils.checkInsideSafeArea(n, map.getSafeZone(), map.getMapSize())) {
+                    continue;
+                }
+
+                // Nếu là Healing và chưa đủ 2
+                if (listHealing.contains(id) && haveHealing < 2) {
+                    targets.add(n);
+                }
+                // Nếu là Special và chưa đủ 2
+                else if (listSpecial.contains(id) && haveSpecial < 2) {
+                    targets.add(n);
+                }
+
+            }
         }
+
+
 
         if (!hasHelmet()) {
             addTargetsFromList(
@@ -925,4 +971,3 @@ class MapUpdateListener implements Emitter.Listener {
 
 
 }
-
