@@ -1,0 +1,192 @@
+\###############################
+
+# CONTEXT.TXT
+
+\###############################
+
+# Agent Context for Game Bot Controller
+
+## I. GAME OVERVIEW
+
+* You are a Hero bot in a timed battle arena. Your goal: collect items and score points by eliminating opponents until match end.
+* Time is divided into steps (0.5s each). Each step you issue one command via SDK (move, shoot, attack, pick up, use, etc.).
+
+## II. MAP CONFIGURATION
+
+1. Sizes & Players:
+
+   * Large: 100×100 cells, 8 players, 10m total
+   * Medium: 70×70, 6–8 players, 5–10m total
+   * Small: 40×40, 1–3 players, 5m total
+2. Safe vs. Dark Zones:
+
+   * Safe zone: central circle (radius from config). No damage, respawn here.
+   * Dark zone: outside safe; damage per step:
+
+     * If remaining time ≥ 2/3 T: 5 HP/step.
+     * After 2/3 T: every 10s increases by +1: HP\_LOSS = ceil(5 + ((T/3) - t)/10).
+3. Item spawns:
+
+   * Guns spawn continuously.
+   * Chests spawn fixed count/positions at start; break to get 4 random items:
+
+     * Melees 20%, Throwables 30%, Specials 5%, Healing 30%, Armor 15%.
+
+## III. SCORING SYSTEM
+
+* Kill points: 100 + 20\*(sum\_{i=0 to y-1} i), y = current kill streak
+* Death: –100
+* Pickup item: configured points per item
+* Use item: configured points
+* On-hit: x targets \* on-hit points
+* Survive at end: +200
+* Tiebreakers: higher kills; if still tied, fewer deaths wins
+
+## IV. DAMAGE-OVER-TIME EFFECTS
+
+* Multiple different DOT effects stack independently (e.g., Poison + Bleed).
+* Reapplying same effect resets duration if new duration > remaining.
+
+## V. ENTITIES & ITEMS (DETAILED)
+
+### 1. Hero
+
+* **Stats:** HP = 100; Speed = 1 cell/step; Size = 1 cell; Score starts at 0.
+* **Movement:** 4 directions (l,r,u,d); cannot traverse obstacles without tag "Can go through".
+* **Inventory slots:**
+
+  * **Weapons:** Max 4, one of each type (Melee, Gun, Throwable, Special)
+  * **Consumables:** Max 4 healing/supporting items
+  * **Armor:** 1 slot
+  * **Helmet:** 1 slot
+* **Drop logic:** If better item appears on map, bot may drop current to pick up new one.
+
+### 2. NPCs
+
+| STT | Name                 | ID         | Role    | Speed | Attack Range | Damage/Heal | Effect                | Cooldown | Notes                  |
+| --- | -------------------- | ---------- | ------- | ----- | ------------ | ----------- | --------------------- | -------- | ---------------------- |
+| 1   | Native               | NATIVE     | Enemy   | 2     | 1 cell       | 10          | Contact damage        | 3s       | Straight-line movement |
+| 2   | Explorer's Ghost     | GHOST      | Enemy   | 2     | 1 cell       | 10          | Contact damage        | 3s       |                        |
+| 3   | Leopard              | LEOPARD    | Enemy   | 2     | 1 cell       | 5/s         | Bleed 3s              | 3s       |                        |
+| 4   | Anaconda             | ANACONDA   | Enemy   | 2     | 1 cell       | 5/s         | Poison 5s             | 3s       |                        |
+| 5   | Rhino                | RHINO      | Enemy   | 2     | 1 cell       | 15          | Contact damage        | 3s       |                        |
+| 6   | Spirit Helper        | SPIRIT     | Ally    | 2     | 1 cell       | 50 heal     | Contact heal          | 10s      |                        |
+| 7   | Golem                | GOLEM      | Enemy   | 2     | 1 cell       | 15          | Stun 1s + contact     | 3s       |                        |
+| 8   | JS Dragon (Cosmetic) | JS\_DRAGON | Neutral | N/A   | N/A          | N/A         | Flies when egg spawns | N/A      | Purely visual          |
+
+### 3. Obstacles
+
+| STT | Name        | ID             | Size | Tags                                    | HP  | Damage | Effect | Duration | Notes                                  |
+| --- | ----------- | -------------- | ---- | --------------------------------------- | --- | ------ | ------ | -------- | -------------------------------------- |
+| 1   | Chest       | CHEST          | 1×1  | Destructible, Pullable rope, Bat-stun   | 20  | -      | -      | -        | Spawns 4 random items                  |
+| 2   | Dragon Egg  | DRAGON\_EGG    | 2×1  | Destructible, Pullable rope, Bat-stun   | 50  | -      | -      | -        | Spawns rare items (Mace, Compass)      |
+| 3   | Hunter Trap | HUNT\_TRAP     | 1×1  | Trap, Can go through, Can shoot through | -   | -      | Stun   | 3s       | Reactivates 10s after triggering       |
+| 4   | Spikes      | SPIKES         | 3×1  | Trap, Can go through, Can shoot through | -   | 5/s    | Poison | 3s       | Resets duration if stayed in zone      |
+| 5   | Banana Peel | BANANA\_PEEL   | 1×1  | Trap, Can go through, Can shoot through | -   | 10     | Stun   | 1s       | Single-use; disappears upon trigger    |
+| 6   | Small Rock  | INDESTRUCTIBLE | 1×1  | Indestructible, Pullable rope, Bat-stun | -   | -      | -      | -        |                                        |
+| ... | ...         | ...            | ...  | ...                                     | ... | ...    | ...    | ...      | See full specification for all entries |
+
+### 4. Weapons & Equipment
+
+| STT | Name        | ID          | Type      | Rarity% | Pickup Points | Damage | On-Hit Points | Cooldown (steps) | Uses | Range | Explosion | Speed (cells/s) | Effect             | Notes                        |
+| --- | ----------- | ----------- | --------- | ------- | ------------- | ------ | ------------- | ---------------- | ---- | ----- | --------- | --------------- | ------------------ | ---------------------------- |
+| 1   | Knife       | KNIFE       | Melee     | 25      | 55            | 25     | 25            | 5                | ∞    | 3×1   | -         | N/A             | -                  |                              |
+| 2   | Crossbow    | CROSSBOW    | Gun       | 25      | 35            | 25     | 25            | 3                | 5    | 1×4   | -         | N/A             | -                  | Shoots arrows                |
+| 3   | Rubber Gun  | RUBBER\_GUN | Gun       | 25      | 50            | 10     | 10            | 2                | 10   | 1×12  | -         | N/A             | -                  | Uses rubber bullets          |
+| 4   | Banana Bomb | BANANA      | Throwable | 20      | 30            | 30     | 30            | 4                | 2    | 1×6   | 3×3       | 6               | Spawns banana peel |                              |
+| 5   | Rope        | ROPE        | Special   | 33.3    | 80            | 5      | 5             | 20               | 2    | 1×6   | -         | 12              | Pull, Stun         | Dual pull modes              |
+| 6   | Sahur Bat   | SAHUR\_BAT  | Special   | 33.3    | 70            | 20     | 20            | 20               | 3    | 1×5   | -         | 5               | Knock-back, Stun   | Fan-shaped melee area effect |
+| ... | ...         | ...         | ...       | ...     | ...           | ...    | ...           | ...              | ...  | ...   | ...       | ...             | ...                | ...                          |
+
+### 5. Healing & Support Items
+
+| STT | Name           | ID               | Type    | Rarity% | Usage Time (s) | Heal HP | Effect          | Duration (s) | Points | Notes                                        |
+| --- | -------------- | ---------------- | ------- | ------- | -------------- | ------- | --------------- | ------------ | ------ | -------------------------------------------- |
+| 1   | God Leaf       | GOD\_LEAF        | Healing | 25      | 0.5            | 10      | -               | -            | 5      |                                              |
+| 2   | Spirit Tear    | SPIRIT\_TEAR     | Healing | 20      | 0.5            | 15      | -               | -            | 15     |                                              |
+| 3   | Elixir         | ELIXIR           | Special | 5       | 0              | 5       | Control Imunity | 7            | 30     | Immunity to CC                               |
+| 4   | Elixir of Life | ELIXIR\_OF\_LIFE | Special | 5       | N/A            | 100     | Revival, Undead | Until death  | 30     | Revives with invuln 2s, random safe location |
+| 5   | Compass        | COMPASS          | Special | Rare    | N/A            | -       | AOE Stun        | 7            | 60     | 9×9 stun around user, excludes self          |
+
+### 6. Armor & Helmet
+
+| STT | Name          | ID             | Type   | Rarity% | Durability (HP) | Damage Reduction | Effect | Notes |
+| --- | ------------- | -------------- | ------ | ------- | --------------- | ---------------- | ------ | ----- |
+| 1   | Wooden Helmet | WOODEN\_HELMET | Helmet | 40      | 20              | 5%               | -      |       |
+| 2   | Basic Armor   | ARMOR          | Armor  | 30      | 50              | 20%              | -      |       |
+| 3   | Magic Helmet  | MAGIC\_HELMET  | Helmet | 20      | 50              | 20%              | -      |       |
+| 4   | Magic Armor   | MAGIC\_ARMOR   | Armor  | 10      | 75              | 30%              | -      |       |
+
+### 7. Effects & Status
+
+| STT | Name             | ID                | Source                | Duration (s)  | DPS/Effect | Description                                               |
+| --- | ---------------- | ----------------- | --------------------- | ------------- | ---------- | --------------------------------------------------------- |
+| 1   | Stun             | STUN              | BAT, BELL, ROPE, etc. | As per source | -          | Disable actions; knock-back still applies                 |
+| 2   | Invisible        | INVISIBLE         | SMOKE, MAGIC          | As per source | -          | Hidden from view; still take damage                       |
+| 3   | Poison           | POISON            | ANACONDA, SPIKES      | As per source | 5/s        | Damage over time                                          |
+| 4   | Bleed            | BLEED             | LEOPARD               | 3             | 5/s        | Damage + 50% healing reduction                            |
+| 5   | Pull             | PULL              | ROPE                  | Instant       | -          | Teleport target or self based on rope mechanics           |
+| 6   | Blind            | BLIND             | SMOKE                 | As per source | -          | No vision inside area                                     |
+| 7   | Knock-Back       | KNOCK\_BACK       | SAHUR\_BAT            | Instant       | -          | Push target 3 cells; stun if collide with tagged obstacle |
+| 8   | Reverse Controls | REVERSE           | BELL                  | 10            | -          | Invert movement controls                                  |
+| 9   | Revival          | REVIVAL           | ELIXIR\_OF\_LIFE      | Until death   | -          | Instant revive with full HP in safe zone                  |
+| 10  | Undead           | UNDEAD            | ELIXIR\_OF\_LIFE      | 2             | -          | Invulnerable for duration; still receive effects          |
+| 11  | Control Immunity | CONTROL\_IMMUNITY | ELIXIR                | 7             | -          | Immune to crowd-control effects                           |
+
+VI. API SPECIFICATION
+
+Hero (jsclub.codefest.sdk.model)
+
+getGameMap() → tất cả thông tin game
+
+getInventory() → trạng thái kho đồ
+
+move(String cmds) → di chuyển bằng chuỗi l/r/u/d
+
+shoot(String dir), attack(String dir) → tấn công từ xa hoặc cận chiến
+
+throwItem(String dir, int dist) → ném vũ khí
+
+useSpecial(String dir) → dùng kỹ năng đặc biệt
+
+pickupItem(), useItem(String id), revokeItem(String id) → nhặt, dùng hoặc bỏ đồ
+
+getEffects() → các hiệu ứng đang chịu
+
+GameMap (jsclub.codefest.sdk.model)
+
+Thông tin bản đồ: getMapSize(), getSafeZone(), getElementByIndex(x,y)
+
+Danh sách phần tử: getListWeapons(), getAllGun()/getAllMelee()/getAllThrowable()/getAllSpecial()
+
+NPC/Obstacle: getListEnemies(), getListAllies(), getListObstacles(), getListChests(), getListTraps(), getObstaclesByTag(tag)
+
+Inventory (jsclub.codefest.sdk.model)
+
+Khởi tạo: Inventory() mặc định Melee HANÐ, hoặc Inventory(List<ItemData>)
+
+Truy xuất: getGun(), getMelee(), getThrowable(), getSpecial()
+
+Hỗ trợ: getListHealingItem(), getArmor(), getHelmet()
+
+Entity (jsclub.codefest.sdk.model)
+
+Thuộc tính chung: Element.getId(), getType(), getX()/getY()
+
+Player: getOtherPlayerInfo(), getCurrentPlayer(), .getID(), .getScore(), .getHealth()
+
+Weapon/Bullet/Armor/HealingItem: các get* tương ứng như getDamage(), getRarity(), getCooldown(), getRange(), getHitPoints(), getExplosionRange(), getEffects()
+
+PathUtils (jsclub.codefest.sdk.algorithm)
+
+getShortestPath(gameMap, restrictedNodes, current, target, skipDarkArea)
+
+checkInsideSafeArea(node, safeZone, mapSize) → boolean
+
+distance(nodeA, nodeB) → manhattan
+
+getCenterOfMap(mapSize) → node tâm
+
+---
+
+*Use this context to guide bot agent decisions, pathfinding, item management, combat, and scoring.*

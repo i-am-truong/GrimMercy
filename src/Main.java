@@ -5,6 +5,7 @@ import jsclub.codefest.sdk.model.Element;
 import jsclub.codefest.sdk.model.GameMap;
 import jsclub.codefest.sdk.Hero;
 import jsclub.codefest.sdk.model.Inventory;
+import jsclub.codefest.sdk.model.healing_items.HealingItem;
 import jsclub.codefest.sdk.model.npcs.Enemy;
 import jsclub.codefest.sdk.model.obstacles.Obstacle;
 import jsclub.codefest.sdk.model.players.Player;
@@ -21,10 +22,9 @@ import java.util.function.Predicate;
 
 public class Main {
     private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
-    private static final String GAME_ID = "171112";
+    private static final String GAME_ID = "196132";
     private static final String PLAYER_NAME = "4nim0sity";
-    private static final String SECRET_KEY = "sk-I66yrGdORXWDWQfpd4qtDA:vVGI_F8vMzFIdjgOH_nnMFp6WkRcYVnXZ9UwiHbPyRqjvTfelockEHJAYgCCZXKax-8jSJCb1HhBGt5ctIUN0A";
-
+    private static final String SECRET_KEY = "sk-QF0trYSgT-uH8Ts5r2GjgQ:77yjD6Bql9CmfVeDElVtLKjigvaSViW4KH_UhnbER4zzDECm1Iy7E9CNAdjU8rqcbVP9eNAznl2JyV1UzHSCPA";
     public static void main(String[] args) throws IOException {
         Hero hero = new Hero(GAME_ID, PLAYER_NAME, SECRET_KEY);
         Emitter.Listener onMapUpdate = new MapUpdateListener(hero);
@@ -190,13 +190,19 @@ class MapUpdateListener implements Emitter.Listener {
         int maxRange = myWeapon.stream().mapToInt(this::getRangeWeaponAHead).max().orElse(0);
         List<Player> playersInRange = otherPlayer.stream().filter(p ->
                 PathUtils.distance(player.getPosition(),p) <= maxRange
-                ).toList();
+        ).toList();
+
+        // Fix: Check if playersInRange is empty to avoid NoSuchElementException
+        if (playersInRange.isEmpty()) {
+            // Nếu không có ai trong tầm, fallback: di chuyển hoặc ẩn nấp
+            handleHide(gameMap, player);
+            return;
+        }
 
         Player target = playersInRange.stream().min(Comparator.comparingDouble(Player::getHealth)).get();
         restrictNode.remove(target);
 
-        Weapon currenWeapon = myWeapon.stream().max(Comparator.comparingInt(Weapon::getDamage)).get();
-
+        Weapon currenWeapon = myWeapon.stream().max(Comparator.comparingInt(Weapon::getDamage)).orElse(null);
 
         if(currenWeapon !=null){
             String dir = getDirection(player.getPosition(), target.getPosition());
@@ -532,8 +538,11 @@ class MapUpdateListener implements Emitter.Listener {
         boolean enemyInRange = others.stream().anyMatch(p ->
                 PathUtils.distance(new Node(x, y), new Node(p.getX(), p.getY())) <= 10);
 
-        boolean canHeal = !inv.getListHealingItem().isEmpty()
+        List<HealingItem> healingItems = inv.getListHealingItem();
+        boolean canHeal = healingItems != null
+                && !healingItems.isEmpty()
                 && player.getHealth() < 100 * 0.7;
+
 
         boolean needLoot =
                 inv.getGun() == null
@@ -570,6 +579,7 @@ class MapUpdateListener implements Emitter.Listener {
     }
 
     public static boolean checkInsideSafeArea(Node current, int safeZone, int mapSize) {
+        if (safeZone <= 0) return false;
         int center = mapSize / 2;
         int dx = Math.abs(current.getX() - center);
         int dy = Math.abs(current.getY() - center);
@@ -579,7 +589,11 @@ class MapUpdateListener implements Emitter.Listener {
     private void handleRunBo(GameMap gameMap, Player player) throws IOException {
         Node targetInSafeZone = findClosestSafeSpot(gameMap, player);
         String pathRun = PathUtils.getShortestPath(gameMap,restrictNode,player.getPosition(),targetInSafeZone,true);
-        hero.move(pathRun.substring(0,1));
+        if (pathRun != null && !pathRun.isEmpty()) {
+            hero.move(pathRun.substring(0,1));
+        } else {
+            hero.move("l");
+        }
     }
 
     private Node findClosestSafeSpot(GameMap gameMap, Player player) {
@@ -644,7 +658,7 @@ class MapUpdateListener implements Emitter.Listener {
         }
     }
 
-    public void handleLoot(GameMap gameMap, Player player){
+    public void handleLoot(GameMap gameMap, Player player) throws IOException {
         Node currentNode = new Node(player.getX(), player.getY());
         List<Node> targets = collectLootTargets(
                 gameMap,
@@ -663,6 +677,21 @@ class MapUpdateListener implements Emitter.Listener {
                 path
         );
     }
+
+    // Danh sách id cho healing và special
+    private static final List<String> listHealing = Arrays.asList(
+            "GOD_LEAF",
+            "SPIRIT_TEAR",
+            "MERMAID_TAIL",
+            "PHOENIX_FEATHERS",
+            "UNICORN_BLOOD"
+    );
+    private static final List<String> listSpecial = Arrays.asList(
+            "ELIXIR",
+            "MAGIC",
+            "ELIXIR_OF_LIFE",
+            "COMPASS"
+    );
     public List<Node> collectLootTargets(
             GameMap map,
             Node current
@@ -679,14 +708,44 @@ class MapUpdateListener implements Emitter.Listener {
             return targets;
         }
 
-        if (hero.getInventory().getListHealingItem().size() <4) {
-            addTargetsFromList(
-                    map.getListHealingItems(),
-                    item -> new Node(item.getX(), item.getY()),
-                    map,
-                    targets
-            );
+
+       // 2) Tối ưu lấy Healing/Special (4 slot tổng, tối đa 2 mỗi loại)
+        if (hero.getInventory().getListHealingItem().size() < 4) {
+            // 1. Đếm số Healing và Special đã có trong túi
+            int haveHealing = 0;
+            int haveSpecial = 0;
+            for (HealingItem h : hero.getInventory().getListHealingItem()) {
+                String hid = h.getId();
+                if (listHealing.contains(hid)) {
+                    haveHealing++;
+                } else if (listSpecial.contains(hid)) {
+                    haveSpecial++;
+                }
+            }
+
+            // 2. Duyệt qua tất cả HealingItem trên map
+            for (HealingItem item : map.getListHealingItems()) {
+                String id = item.getId();
+                Node n = new Node(item.getX(), item.getY());
+
+                // Chỉ xét trong vùng an toàn
+                if (!PathUtils.checkInsideSafeArea(n, map.getSafeZone(), map.getMapSize())) {
+                    continue;
+                }
+
+                // Nếu là Healing và chưa đủ 2
+                if (listHealing.contains(id) && haveHealing < 2) {
+                    targets.add(n);
+                }
+                // Nếu là Special và chưa đủ 2
+                else if (listSpecial.contains(id) && haveSpecial < 2) {
+                    targets.add(n);
+                }
+
+            }
         }
+
+
 
         if (!hasHelmet()) {
             addTargetsFromList(
@@ -926,4 +985,3 @@ class MapUpdateListener implements Emitter.Listener {
 
 
 }
-
