@@ -21,7 +21,7 @@ import java.util.function.Predicate;
 
 public class Main {
     private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
-    private static final String GAME_ID = "149264";
+    private static final String GAME_ID = "171112";
     private static final String PLAYER_NAME = "4nim0sity";
     private static final String SECRET_KEY = "sk-I66yrGdORXWDWQfpd4qtDA:vVGI_F8vMzFIdjgOH_nnMFp6WkRcYVnXZ9UwiHbPyRqjvTfelockEHJAYgCCZXKax-8jSJCb1HhBGt5ctIUN0A";
 
@@ -97,8 +97,12 @@ class MapUpdateListener implements Emitter.Listener {
         }
         System.out.println("=============DEBUG_PART (" + currentStep + ")=================");
         System.out.println("Current Decision is : " + decision);
-        System.out.println("My Inventory: " + myInventory);
-        System.out.println("code fest inventory: " + hero.getInventory());
+//        System.out.println("My Inventory: " + myInventory);
+        System.out.println("code fest inventory gun: " + hero.getInventory().getGun());
+        System.out.println("code fest inventory melee: " + hero.getInventory().getMelee());
+        System.out.println("code fest inventory throw: " + hero.getInventory().getThrowable());
+        System.out.println("code fest inventory special: " + hero.getInventory().getSpecial());
+        System.out.println("code fest inventory heal: " + hero.getInventory().getListHealingItem());
         System.out.println("Current Node loot Target : "+ currentNodeTarget);
         System.out.println("========================================");
     }
@@ -114,10 +118,11 @@ class MapUpdateListener implements Emitter.Listener {
     }
 
     private void handleHide(GameMap gameMap, Player player) throws IOException {
-        Node safestSpot = findSafeSpotAwayFromEnemies(gameMap, player);
-        String pathToHide = PathUtils.getShortestPath(gameMap,restrictNode,player.getPosition(),safestSpot,true);
+        Node safestSpot1 = findSafeSpotAwayFromEnemies(gameMap, player);
+        List<Node> list = new ArrayList<>();
+        list.add(safestSpot1);
+        String pathToHide = findBestPath(gameMap, player.getPosition(), list, gameMap.getOtherPlayerInfo());
         hero.move(pathToHide.substring(0,1));
-
     }
 
     private Node findSafeSpotAwayFromEnemies(GameMap gameMap, Player player) {
@@ -175,6 +180,8 @@ class MapUpdateListener implements Emitter.Listener {
             && !"HAND".equalsIgnoreCase(hero.getInventory().getMelee().getId()); }
     public boolean hasSpecial(){return hero.getInventory().getSpecial()!= null;}
     public boolean hasHealingItem(){return !hero.getInventory().getListHealingItem().isEmpty(); }
+    public boolean hasHelmet(){return hero.getInventory().getHelmet()!= null; }
+    public boolean hasArmor(){return hero.getInventory().getArmor()!= null; }
 
     private void handleFight(GameMap gameMap, Player player) throws IOException {
         Inventory inv = hero.getInventory();
@@ -504,9 +511,12 @@ class MapUpdateListener implements Emitter.Listener {
 
         enum Phase { EARLY, MID, LATE }
         Phase phase;
-        if (remaining > 2.0/3*totalSec)      phase = Phase.EARLY;
-        else if (remaining > 1.0/3*totalSec) phase = Phase.MID;
-        else                                 phase = Phase.LATE;
+        double percentRemaining = remaining / totalSec;
+
+        if (percentRemaining > 0.85)      phase = Phase.EARLY;
+        else if (percentRemaining > 0.3) phase = Phase.MID;
+        else                              phase = Phase.LATE;
+
         System.out.println("Current Phase: " +phase);
         System.out.println("total sec: " +totalSec);
         System.out.println("remaining: " +remaining);
@@ -630,7 +640,7 @@ class MapUpdateListener implements Emitter.Listener {
             String pathToClosetPlayer = PathUtils.getShortestPath(gameMap,restrictNode,player.getPosition(),closestPlayer,false);
             hero.move(pathToClosetPlayer.substring(0,1));
         }else{
-            handleHide(gameMap, player);
+            handleHide(gameMap,player);
         }
     }
 
@@ -659,17 +669,17 @@ class MapUpdateListener implements Emitter.Listener {
     ) {
         List<Node> targets = new ArrayList<>();
         int x = current.x, y = current.y;
-        if (!myInventory.hasGun() &&  existsWithin(map.getAllGun(), current, 5)) {
+        if (!hasGun() &&  existsWithin(map.getAllGun(), current, 5)) {
             addNearbySafeGunTargets(map, current, 5, targets);
             return targets;
         }
 
-        if (myInventory.hasMelee() && !myInventory.hasGun() && existsWithin(map.getAllGun(), current, 10)) {
+        if (hasMelee() && !hasGun() && existsWithin(map.getAllGun(), current, 10)) {
             addNearbySafeGunTargets(map, current, 10, targets);
             return targets;
         }
 
-        if (myInventory.getHealIds()[3] == null) {
+        if (hero.getInventory().getListHealingItem().size() <4) {
             addTargetsFromList(
                     map.getListHealingItems(),
                     item -> new Node(item.getX(), item.getY()),
@@ -678,7 +688,7 @@ class MapUpdateListener implements Emitter.Listener {
             );
         }
 
-        if (!myInventory.hasHelmet()) {
+        if (!hasHelmet()) {
             addTargetsFromList(
                     map.getListArmors(),
                     a -> new Node(a.getX(), a.getY()),
@@ -688,7 +698,7 @@ class MapUpdateListener implements Emitter.Listener {
                             || armor.getId().equals("MAGIC_HELMET")
             );
         }
-        if (!myInventory.hasArmor()) {
+        if (!hasArmor()) {
             addTargetsFromList(
                     map.getListArmors(),
                     a -> new Node(a.getX(), a.getY()),
@@ -700,22 +710,21 @@ class MapUpdateListener implements Emitter.Listener {
         }
 
         // 4) Vũ khí thiếu
-        if (!myInventory.hasGun()) {
+        if (!hasGun()) {
             addTargetsFromList(map.getAllGun(), w -> new Node(w.getX(), w.getY()), map, targets);
         }
-        if (!myInventory.hasMelee()) {
+        if (!hasMelee()) {
             addTargetsFromList(map.getAllMelee(), w -> new Node(w.getX(), w.getY()), map, targets);
         }
-        if (!myInventory.hasThrowable()) {
+        if (!hasThrowable()) {
             addTargetsFromList(map.getAllThrowable(), w -> new Node(w.getX(), w.getY()), map, targets);
         }
-        if(!myInventory.hasSpecial()){
+        if(!hasSpecial()){
             addTargetsFromList(map.getAllSpecial(), w -> new Node(w.getX(), w.getY()), map, targets);
         }
 
 
-        if (!myInventory.hasGun() || !myInventory.hasMelee() || !myInventory.hasThrowable() || !myInventory.hasHelmet() || !myInventory.hasArmor() || myInventory.getHealIds()[3] == null) {
-            System.out.println("5) Nếu vẫn thiếu bất kỳ thứ gì → tìm chest");
+        if (!hasGun() || !hasMelee() || !hasThrowable() || !hasHelmet() || !hasArmor() || hero.getInventory().getListHealingItem().size() <4) {
             targets.addAll(findNearbyChests(map, x, y));
         }
 
@@ -857,21 +866,15 @@ class MapUpdateListener implements Emitter.Listener {
             try {
                 Element elem = map.getElementByIndex(x, y);
                 if (elem != null) {
-                    for (int i = 0; i < 10; i++) {
-                        hero.pickupItem();
-                    }
+                    hero.pickupItem();
                     myHero.pickupItem(elem.getId());
                 }
-
-                // 2) Không pickup được → thử attack chest kề bên
                 attackAdjacentChestsNoId(hero, map, x, y);
             } catch (IOException e) {
                 e.printStackTrace();
             }
             return false;
         }
-
-        // 3) Nếu chưa đến → di chuyển theo path
         if (path != null && !path.isEmpty()) {
             String step = path.substring(0, 1);
             try {
@@ -882,7 +885,6 @@ class MapUpdateListener implements Emitter.Listener {
             return true;
         }
 
-        // Nếu không còn path và chưa đến target → cũng thử attack
         try {
             attackAdjacentChestsNoId(hero, map, x, y);
         } catch (Exception e) {
