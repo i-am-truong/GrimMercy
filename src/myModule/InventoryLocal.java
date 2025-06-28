@@ -1,14 +1,16 @@
 package myModule;
 
 import jsclub.codefest.sdk.factory.WeaponFactory;
-import jsclub.codefest.sdk.model.equipments.Armor;
-import jsclub.codefest.sdk.model.equipments.HealingItem;
+import jsclub.codefest.sdk.model.armors.Armor;
+import jsclub.codefest.sdk.model.healing_items.HealingItem;
 import jsclub.codefest.sdk.model.weapon.Weapon;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class InventoryLocal {
+    private int bullet = 0;
+    private int numberThrow = 0;
     private Weapon gun;
     private Weapon melee = WeaponFactory.getWeaponById("HAND");
     private Weapon throwable;
@@ -22,6 +24,18 @@ public class InventoryLocal {
     }
     public void setGun(Weapon gun) {
         this.gun = gun;
+        if(gun != null){
+            bullet = gun.getUseCounts();
+        }
+    }
+    public int getBullet(){
+        if(hasGun()){
+            return this.bullet;
+        }
+        return 0;
+    }
+    public void setBullet(int bullet){
+        this.bullet = bullet;
     }
     public Weapon getMelee() {
         return this.melee;
@@ -32,6 +46,18 @@ public class InventoryLocal {
     }
     public void setThrowable(Weapon throwable) {
         this.throwable = throwable;
+        if(throwable != null){
+            numberThrow = throwable.getUseCounts();
+        }
+    }
+    public int getNumberThrow(){
+        if(hasThrowable()){
+            return  numberThrow;
+        }
+        return 0;
+    }
+    public void setNumberThrow(int numberThrow){
+        this.numberThrow = numberThrow;
     }
     public Weapon getSpecial() {
         return this.special;
@@ -73,6 +99,7 @@ public class InventoryLocal {
         return this.armor != null;
     }
 
+    public boolean hasSpecial(){return this.special != null;}
     public String[] getHealIds() {
         String[] ids = new String[4];
         for (int i = 0; i < listHealingItem.size() && i < 4; i++) {
@@ -91,7 +118,7 @@ public class InventoryLocal {
         this.setSpecial((Weapon)null);
         this.setArmor((Armor)null);
         this.setHelmet((Armor)null);
-        this.setListHealingItem((List)null);
+        this.listHealingItem = new ArrayList<>();
     }
 
     @Override
