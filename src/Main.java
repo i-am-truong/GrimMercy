@@ -9,8 +9,6 @@ import jsclub.codefest.sdk.model.npcs.Enemy;
 import jsclub.codefest.sdk.model.obstacles.Obstacle;
 import jsclub.codefest.sdk.model.players.Player;
 import jsclub.codefest.sdk.model.weapon.Weapon;
-import myModule.InventoryLocal;
-import myModule.LocalHeroController;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -21,7 +19,7 @@ import java.util.function.Predicate;
 
 public class Main {
     private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
-    private static final String GAME_ID = "171112";
+    private static final String GAME_ID = "123320";
     private static final String PLAYER_NAME = "4nim0sity";
     private static final String SECRET_KEY = "sk-I66yrGdORXWDWQfpd4qtDA:vVGI_F8vMzFIdjgOH_nnMFp6WkRcYVnXZ9UwiHbPyRqjvTfelockEHJAYgCCZXKax-8jSJCb1HhBGt5ctIUN0A";
 
@@ -38,25 +36,24 @@ class MapUpdateListener implements Emitter.Listener {
         this.hero = hero;
     }
     private static final Logger log = LogManager.getLogger(MapUpdateListener.class);
-    private final InventoryLocal myInventory = new InventoryLocal();
-    private final LocalHeroController myHero = new LocalHeroController(myInventory);
     private final Hero hero;
-    private int currentStep = 0;
 
+    private int currentStep = 0;
     private List<Node> restrictNode = new ArrayList<>();
     private static Player savedTarget = null;
     private static String savedName = null;
     private static Node currentNodeTarget = null;
     private boolean[] gocFlags = {true, false, false, false};
-    //    to condition
+    //    to condition to runBo
     private int currentSafeZone = 999;
     private boolean isShrinking = false;
+    private Node safeNodeToRunBo = null;
+    //    restrict node
     static List<Enemy> listNodeEnemySave = new ArrayList<>();
     private static String[] enemyDirection = new String[100];
     private static Boolean[][][] enemyMap = new Boolean[121][121][100];
     private static int enemyMinEdge[] = new int[100];
     private static int enemyMaxEdge[] = new int[100];
-
     private static int[] toado = new int[100];
 
     @Override
@@ -80,8 +77,13 @@ class MapUpdateListener implements Emitter.Listener {
             isShrinking = (currentSafeZone != gameMap.getSafeZone());
             currentSafeZone = gameMap.getSafeZone();
         }
-        getNodesToAvoid(gameMap);
-        addEnemyToRestrict(gameMap,player);
+        if(safeNodeToRunBo == null
+                || !gameMap.getElementByIndex(safeNodeToRunBo.getX(),safeNodeToRunBo.getY()).getId().equalsIgnoreCase("ROAD")
+                || !PathUtils.checkInsideSafeArea(safeNodeToRunBo,gameMap.getSafeZone(),gameMap.getMapSize())){
+            safeNodeToRunBo = findClosestSafeSpot(gameMap,player);
+        }
+        updateRestrictNode(gameMap,player);
+
         currentStep++;
         updateCooldowns();
         String decision = getDecisionForNextStep(gameMap, player);
@@ -97,18 +99,20 @@ class MapUpdateListener implements Emitter.Listener {
         }
         System.out.println("=============DEBUG_PART (" + currentStep + ")=================");
         System.out.println("Current Decision is : " + decision);
-//        System.out.println("My Inventory: " + myInventory);
         System.out.println("code fest inventory gun: " + hero.getInventory().getGun());
         System.out.println("code fest inventory melee: " + hero.getInventory().getMelee());
         System.out.println("code fest inventory throw: " + hero.getInventory().getThrowable());
         System.out.println("code fest inventory special: " + hero.getInventory().getSpecial());
         System.out.println("code fest inventory heal: " + hero.getInventory().getListHealingItem());
+        System.out.println("top element: " + gameMap.getElementByIndex(player.getX(),player.getY()+1).getId());
+        System.out.println("bot element: " + gameMap.getElementByIndex(player.getX(),player.getY()-1).getId());
+        System.out.println("right element: " + gameMap.getElementByIndex(player.getX()+1,player.getY()).getId());
+        System.out.println("left element: " + gameMap.getElementByIndex(player.getX()-1,player.getY()).getId());
         System.out.println("Current Node loot Target : "+ currentNodeTarget);
-        System.out.println("========================================");
+
     }
 
     public void handleDie(){
-        myInventory.reset();
         savedTarget = null;
         savedName = null;
         currentNodeTarget = null;
@@ -187,7 +191,7 @@ class MapUpdateListener implements Emitter.Listener {
         Inventory inv = hero.getInventory();
         List<Player> otherPlayer = gameMap.getOtherPlayerInfo().stream().filter(p->p.getHealth()>0).toList();
         List<Weapon> myWeapon = getMyListReadyWeapon();
-        int maxRange = myWeapon.stream().mapToInt(this::getRangeWeaponAHead).max().orElse(0);
+        int maxRange = myWeapon.stream().mapToInt(this::getRangeWeaponAHead).max().orElse(1);
         List<Player> playersInRange = otherPlayer.stream().filter(p ->
                 PathUtils.distance(player.getPosition(),p) <= maxRange
                 ).toList();
@@ -199,11 +203,14 @@ class MapUpdateListener implements Emitter.Listener {
 
 
         if(currenWeapon !=null){
+            boolean canAttack = canShoot(player.getPosition(),target.getPosition(),maxRange);
             String dir = getDirection(player.getPosition(), target.getPosition());
-            int dist = Math.abs(player.getX() - target.getX())
-                    + Math.abs(player.getY() - target.getY());
-            if (dist > getRangeWeaponAHead(currenWeapon)) {
-                hero.move(dir);
+            int dist =PathUtils.distance(player.getPosition(),target.getPosition());
+
+            if (!canAttack) {
+                String pathToAttack = getPathToShoot(gameMap,player.getPosition(),target.getPosition(),maxRange);
+                hero.move(pathToAttack.substring(0,1));
+
             }else{
                 System.out.printf("Hero dùng %s đánh Player[%d,%d]\n",
                         currenWeapon.getId(), target.getX(), target.getY());
@@ -299,10 +306,65 @@ class MapUpdateListener implements Emitter.Listener {
         // Thực hiện di chuyển
         hero.move(dir);
     }
+    public String getPathToShoot(GameMap gameMap, Node current, Node enemy, int range) {
+        List<Node> candidatePositions = new ArrayList<>();
+        int x2 = enemy.getX();
+        int y2 = enemy.getY();
+
+        // Xét tất cả vị trí trong tầm range trên cùng hàng
+        for (int dx = -range; dx <= range; dx++) {
+            if (dx == 0) continue;
+            int x = x2 + dx;
+            int y = y2;
+            if (Math.abs(dx) <= range && x >= 0 && x < gameMap.getMapSize()) {
+                candidatePositions.add(new Node(x, y));
+            }
+        }
+
+        // Xét tất cả vị trí trong tầm range trên cùng cột
+        for (int dy = -range; dy <= range; dy++) {
+            if (dy == 0) continue;
+            int x = x2;
+            int y = y2 + dy;
+            if (Math.abs(dy) <= range && y >= 0 && y < gameMap.getMapSize()) {
+                candidatePositions.add(new Node(x, y));
+            }
+        }
+
+        String bestPath = null;
+        int minLength = Integer.MAX_VALUE;
+
+        for (Node target : candidatePositions) {
+            String path = PathUtils.getShortestPath(gameMap, restrictNode, current, target, false);
+            if (path != null && path.length() < minLength) {
+                bestPath = path;
+                minLength = path.length();
+            }
+        }
+
+        return bestPath;
+    }
+
+
+    public static boolean canShoot(Node player, Node enemy, int range) {
+        int x1 = player.getX(), y1 = player.getY();
+        int x2 = enemy.getX(), y2 = enemy.getY();
+
+        // Điều kiện: Cùng hàng hoặc cùng cột
+        boolean sameRow = y1 == y2;
+        boolean sameCol = x1 == x2;
+
+        if (!sameRow && !sameCol) return false;
+
+        // Tính khoảng cách Manhattan (vì chỉ cần thẳng hàng thì chỉ một chiều có độ lệch)
+        int distance = Math.abs(x1 - x2) + Math.abs(y1 - y2);
+
+        return distance <= range;
+    }
+
     private static String getDirection(Node p, Node e) {
         int dx = e.getX() - p.getX();
         int dy = e.getY() - p.getY();
-        // Ưu tiên trục có sai khác lớn hơn để bước vào gần nhất
         if (Math.abs(dx) >= Math.abs(dy)) {
             return dx > 0 ? "r" : "l";
         } else {
@@ -478,7 +540,7 @@ class MapUpdateListener implements Emitter.Listener {
         }
     }
 
-    private void getNodesToAvoid(GameMap gameMap) {
+    private void updateRestrictNode(GameMap gameMap, Player player) {
         List<Node> nodes = new ArrayList<>(gameMap.getListObstacles());
         Iterator<Node> iterator = nodes.iterator();
         while (iterator.hasNext()) {
@@ -492,6 +554,7 @@ class MapUpdateListener implements Emitter.Listener {
         }
         nodes.addAll(gameMap.getOtherPlayerInfo());
         restrictNode.addAll(nodes);
+        addEnemyToRestrict(gameMap,player);
     }
 
     public String getDecisionForNextStep(GameMap gameMap, Player player) {
@@ -523,14 +586,19 @@ class MapUpdateListener implements Emitter.Listener {
 
         int x = player.getX(), y = player.getY();
         boolean needRunBo = false;
-            needRunBo = !checkInsideSafeArea(new Node(x, y), gameMap.getSafeZone()-2, gameMap.getMapSize())
+            needRunBo = !checkInsideSafeArea(new Node(x, y), gameMap.getSafeZone()-5, gameMap.getMapSize())
             && isShrinking;
+
         Inventory inv = hero.getInventory();
 
         List<Player> others = gameMap.getOtherPlayerInfo().stream()
                 .filter(p -> p.getHealth() > 0).toList();
+        List<Weapon> myWeapon = getMyListReadyWeapon();
+        int maxRange = myWeapon.stream().mapToInt(this::getRangeWeaponAHead).max().orElse(1);
+        System.out.println("maxRange: " + maxRange);
         boolean enemyInRange = others.stream().anyMatch(p ->
-                PathUtils.distance(new Node(x, y), new Node(p.getX(), p.getY())) <= 10);
+                PathUtils.distance(new Node(x, y), new Node(p.getX(), p.getY())) <= maxRange);
+
 
         boolean canHeal = !inv.getListHealingItem().isEmpty()
                 && player.getHealth() < 100 * 0.7;
@@ -547,7 +615,7 @@ class MapUpdateListener implements Emitter.Listener {
             case EARLY:
                 if (needRunBo) return "runBo";
                 if (enemyInRange) {
-                    if (needLoot) return "loot";
+                    if (hasGun()) return "fight";
                     return "hide";
                 }
                 if (needLoot) return "loot";
@@ -577,14 +645,13 @@ class MapUpdateListener implements Emitter.Listener {
     }
 
     private void handleRunBo(GameMap gameMap, Player player) throws IOException {
-        Node targetInSafeZone = findClosestSafeSpot(gameMap, player);
-        String pathRun = PathUtils.getShortestPath(gameMap,restrictNode,player.getPosition(),targetInSafeZone,true);
+        String pathRun = PathUtils.getShortestPath(gameMap,restrictNode,player.getPosition(),safeNodeToRunBo,false);
         hero.move(pathRun.substring(0,1));
     }
 
     private Node findClosestSafeSpot(GameMap gameMap, Player player) {
         int mapSize = gameMap.getMapSize();
-        int safeZone = gameMap.getSafeZone()-1;
+        int safeZone = gameMap.getSafeZone()-8;
         int centerX = mapSize / 2;
         int centerY = mapSize / 2;
 
@@ -595,10 +662,6 @@ class MapUpdateListener implements Emitter.Listener {
         int maxX = centerX + safeZone;
         int minY = centerY - safeZone;
         int maxY = centerY + safeZone;
-        System.out.println("minX: " + minX);
-        System.out.println("maxX: " + maxX);
-        System.out.println("minY: " + minY);
-        System.out.println("maxX: " + maxY);
         // Clamp giá trị trong giới hạn bản đồ
         minX = Math.max(minX, 0);
         maxX = Math.min(maxX, mapSize - 1);
@@ -608,6 +671,7 @@ class MapUpdateListener implements Emitter.Listener {
         Node closest = null;
         int minDistance = Integer.MAX_VALUE;
 
+        restrictNode.addAll(gameMap.getOtherPlayerInfo());
         // Tìm ô gần nhất trong vùng safe
         for (int x = minX; x <= maxX; x++) {
             for (int y = minY; y <= maxY; y++) {
@@ -621,6 +685,7 @@ class MapUpdateListener implements Emitter.Listener {
                 }
             }
         }
+
         return closest != null ? closest : new Node(centerX, centerY);
     }
 
@@ -867,7 +932,6 @@ class MapUpdateListener implements Emitter.Listener {
                 Element elem = map.getElementByIndex(x, y);
                 if (elem != null) {
                     hero.pickupItem();
-                    myHero.pickupItem(elem.getId());
                 }
                 attackAdjacentChestsNoId(hero, map, x, y);
             } catch (IOException e) {
@@ -917,7 +981,6 @@ class MapUpdateListener implements Emitter.Listener {
     private void revokeItem(String ItemId){
         try{
             hero.revokeItem(ItemId);
-            myHero.revokeItem(ItemId);
         }catch (Exception e){
             e.printStackTrace();
         }
