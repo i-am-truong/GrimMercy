@@ -270,6 +270,22 @@ class MapUpdateListener implements Emitter.Listener {
             return;
         }
 
+        // --- SUPPORT ITEM LOGIC ---
+        // Nếu máu thấp và có support item (healing/special) thì dùng trước khi đánh
+        if (hasHealingItem() && player.getHealth() < 100 * 0.7) {
+            // Ưu tiên dùng ELIXIR_OF_LIFE, ELIXIR, MAGIC, COMPASS nếu có
+            List<String> supportPriority = Arrays.asList(
+                "ELIXIR_OF_LIFE", "ELIXIR", "MAGIC", "COMPASS",
+                "GOD_LEAF", "SPIRIT_TEAR", "MERMAID_TAIL", "PHOENIX_FEATHERS", "UNICORN_BLOOD"
+            );
+            for (Element e : hero.getInventory().getListHealingItem()) {
+                if (supportPriority.contains(e.getId())) {
+                    hero.useItem(e.getId());
+                    return;
+                }
+            }
+        }
+
         List<Weapon> myWeapon = getMyListReadyWeapon();
         int maxRange = myWeapon.stream().mapToInt(this::getRangeWeaponAHead).max().orElse(1);
         List<Player> playersInRange = otherPlayer.stream().filter(p ->
@@ -1264,4 +1280,3 @@ class MapUpdateListener implements Emitter.Listener {
         }
     }
 }
-
