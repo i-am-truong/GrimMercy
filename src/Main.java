@@ -20,7 +20,7 @@ import java.util.function.Predicate;
 
 public class Main {
     private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
-    private static final String GAME_ID = "183615";
+    private static final String GAME_ID = "192115";
     private static final String PLAYER_NAME = "NeuroSama";
     private static final String SECRET_KEY = "sk-I66yrGdORXWDWQfpd4qtDA:vVGI_F8vMzFIdjgOH_nnMFp6WkRcYVnXZ9UwiHbPyRqjvTfelockEHJAYgCCZXKax-8jSJCb1HhBGt5ctIUN0A";
 
@@ -771,28 +771,6 @@ class MapUpdateListener implements Emitter.Listener {
             System.out.println("vao day thi con js lam an nhu lon");
             return "runBo";
         }
-        int mapSize     = gameMap.getMapSize();
-        double tickDur  = 0.5;
-        double elapsed  = currentStep * tickDur;
-        double totalSec;
-
-        final int Smin = 40, Smax = 100;
-        final int Tmin = 300, Tmax = 600;
-        totalSec = Tmin + (mapSize - Smin)/(double)(Smax - Smin) * (Tmax - Tmin);
-
-        double remaining = totalSec - elapsed;
-
-        enum Phase { EARLY, MID, LATE }
-        Phase phase;
-        double percentRemaining = remaining / totalSec;
-
-        if (percentRemaining > 0.85)      phase = Phase.EARLY;
-        else if (percentRemaining > 0.3) phase = Phase.MID;
-        else                              phase = Phase.LATE;
-
-        System.out.println("Current Phase: " +phase);
-        System.out.println("total sec: " +totalSec);
-        System.out.println("remaining: " +remaining);
 
         int x = player.getX(), y = player.getY();
         boolean needRunBo = !checkInsideSafeArea(new Node(x, y), gameMap.getSafeZone()-8, gameMap.getMapSize())
@@ -815,7 +793,7 @@ class MapUpdateListener implements Emitter.Listener {
         boolean enemyInRange = closest != null && !myWeaponCanUse.isEmpty();
 
 
-        boolean canHeal = !inv.getListHealingItem().isEmpty()
+        boolean canHeal = hasHealingItem()
                 && player.getHealth() < 100 * 0.7;
     // condition for loot
         boolean needLoot = false;
@@ -872,23 +850,11 @@ class MapUpdateListener implements Emitter.Listener {
             }
         }
 
-        switch (phase) {
-            case EARLY:
-                if (needRunBo) return "runBo";
-                if (enemyInRange) {
-                    if (hasGun()|| hasThrowable()) return "fight";
-                    return "hide";
-                }
-                if (needLoot) return "loot";
-                return "hide";
-            case MID, LATE:
-                if (needRunBo) return "runBo";
-                if (canHeal) return "heal";
-                if (enemyInRange) return "fight";
-                if (needLoot) return "loot";
-                return "hunting";
-        }
-        return "default";
+        if (needRunBo) return "runBo";
+        if (canHeal) return "heal";
+        if (enemyInRange) return "fight";
+        if (needLoot) return "loot";
+        return "hunting";
     }
 
 
