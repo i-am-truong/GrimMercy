@@ -7,6 +7,7 @@ import jsclub.codefest.sdk.Hero;
 import jsclub.codefest.sdk.model.Inventory;
 import jsclub.codefest.sdk.model.npcs.Enemy;
 import jsclub.codefest.sdk.model.obstacles.Obstacle;
+import jsclub.codefest.sdk.model.obstacles.ObstacleTag;
 import jsclub.codefest.sdk.model.players.Player;
 import jsclub.codefest.sdk.model.weapon.Weapon;
 import org.apache.logging.log4j.LogManager;
@@ -19,7 +20,7 @@ import java.util.function.Predicate;
 
 public class Main {
     private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
-    private static final String GAME_ID = "123320";
+    private static final String GAME_ID = "142415";
     private static final String PLAYER_NAME = "4nim0sity";
     private static final String SECRET_KEY = "sk-I66yrGdORXWDWQfpd4qtDA:vVGI_F8vMzFIdjgOH_nnMFp6WkRcYVnXZ9UwiHbPyRqjvTfelockEHJAYgCCZXKax-8jSJCb1HhBGt5ctIUN0A";
 
@@ -55,7 +56,8 @@ class MapUpdateListener implements Emitter.Listener {
     private static int enemyMinEdge[] = new int[100];
     private static int enemyMaxEdge[] = new int[100];
     private static int[] toado = new int[100];
-
+    private String previousDecision = null;
+    private String lastDecision = null;
     @Override
     public void call(Object... args) {
         try {
@@ -86,8 +88,8 @@ class MapUpdateListener implements Emitter.Listener {
 
         currentStep++;
         updateCooldowns();
-        String decision = getDecisionForNextStep(gameMap, player);
-        switch (decision) {
+        String currentDecision  = getDecisionForNextStep(gameMap, player);
+        switch (currentDecision ) {
             case "die" -> handleDie();
             case "runBo" -> handleRunBo(gameMap, player);
             case "fight"-> handleFight(gameMap,player);
@@ -95,10 +97,21 @@ class MapUpdateListener implements Emitter.Listener {
             case "heal" -> handleHeal(gameMap, player);
             case "loot" -> handleLoot(gameMap, player);
             case "hunting" -> handleHunting(gameMap, player);
-            default -> System.out.println("Unexpected decision: " + decision);
+            default -> System.out.println("Unexpected decision: " + currentDecision );
         }
+        if(currentStep == 0){
+            previousDecision =currentDecision;
+        }
+
+        if (lastDecision != null && !currentDecision.equalsIgnoreCase(lastDecision) &&
+                !lastDecision.equalsIgnoreCase("die")) {
+            previousDecision = lastDecision;
+        }
+        lastDecision = currentDecision;
+
+
         System.out.println("=============DEBUG_PART (" + currentStep + ")=================");
-        System.out.println("Current Decision is : " + decision);
+        System.out.println("Current Decision is : " + currentDecision);
         System.out.println("code fest inventory gun: " + hero.getInventory().getGun());
         System.out.println("code fest inventory melee: " + hero.getInventory().getMelee());
         System.out.println("code fest inventory throw: " + hero.getInventory().getThrowable());
@@ -109,7 +122,16 @@ class MapUpdateListener implements Emitter.Listener {
         System.out.println("right element: " + gameMap.getElementByIndex(player.getX()+1,player.getY()).getId());
         System.out.println("left element: " + gameMap.getElementByIndex(player.getX()-1,player.getY()).getId());
         System.out.println("Current Node loot Target : "+ currentNodeTarget);
-
+    }
+    public void doPreviousAction(GameMap gameMap, Player player) throws IOException {
+        switch (previousDecision) {
+            case "runBo" -> handleRunBo(gameMap, player);
+            case "fight"-> handleFight(gameMap,player);
+            case "heal" -> handleHeal(gameMap, player);
+            case "loot" -> handleLoot(gameMap, player);
+            case "hunting" -> handleHunting(gameMap, player);
+            default -> handleHide(gameMap, player);
+        }
     }
 
     public void handleDie(){
@@ -122,11 +144,52 @@ class MapUpdateListener implements Emitter.Listener {
     }
 
     private void handleHide(GameMap gameMap, Player player) throws IOException {
-        Node safestSpot1 = findSafeSpotAwayFromEnemies(gameMap, player);
-        List<Node> list = new ArrayList<>();
-        list.add(safestSpot1);
-        String pathToHide = findBestPath(gameMap, player.getPosition(), list, gameMap.getOtherPlayerInfo());
+        Node safestSpot = findSafeSpotAwayFromEnemies(gameMap, player);
+        for (Player p : gameMap.getOtherPlayerInfo()) {
+            restrictNode.add(new Node(p.getX(), p.getY()));
+        }
+        String pathToHide = PathUtils.getShortestPath(gameMap,restrictNode, player.getPosition(), safestSpot,false);
+        if(pathToHide == null){
+            int size = gameMap.getMapSize();
+            String escapePath = null;
+            // Góc 1: dưới-trái; 2: dưới-phải; 3: trên-phải; 4: trên-trái
+            if (gocFlags[0]) {
+                escapePath = tryCorner(gameMap, restrictNode, player.getPosition(), size / 2 - 1, size / 2 - 1);
+                gocFlags[0] = false;
+                gocFlags[1] = true;  // lần sau chuyển qua góc 2
+            } else if (gocFlags[1]) {
+                escapePath = tryCorner(gameMap, restrictNode, player.getPosition(), size / 2 - 1, size - size / 2);
+                gocFlags[1] = false;
+                gocFlags[2] = true;
+            } else if (gocFlags[2]) {
+                escapePath = tryCorner(gameMap, restrictNode, player.getPosition(), size - size / 2, size - size / 2);
+                gocFlags[2] = false;
+                gocFlags[3] = true;
+            } else if (gocFlags[3]) {
+                escapePath = tryCorner(gameMap, restrictNode, player.getPosition(), size - size / 2, size / 2 - 1);
+                gocFlags[3] = false;
+                gocFlags[0] = true;
+            }
+            if(escapePath != null){
+                pathToHide = escapePath;
+            }else{
+                Node center = PathUtils.getCenterOfMap(gameMap.getMapSize());
+                pathToHide = PathUtils.getShortestPath(gameMap,restrictNode,player.getPosition(),center,false);
+            }
+        }
+        if(pathToHide == null){
+            System.out.println("van con null nua thi chiu day");
+        }
         hero.move(pathToHide.substring(0,1));
+    }
+    private String tryCorner(
+            GameMap map,
+            List<Node> restricted,
+            Node current,
+            int tx, int ty
+    ) {
+        Node corner = new Node(tx, ty);
+        return PathUtils.getShortestPath(map, restricted, current, corner, false);
     }
 
     private Node findSafeSpotAwayFromEnemies(GameMap gameMap, Player player) {
@@ -174,7 +237,10 @@ class MapUpdateListener implements Emitter.Listener {
     private int throwCooldownTick = 0;
     private int meleeCooldownTick = 0;
     private int specialCooldownTick = 0;
-    public boolean canUseGun()     { return gunCooldownTick == 0; }
+    public boolean canUseGun()     {
+        return gunCooldownTick == 0;
+
+    }
     public boolean canUseThrow()   { return throwCooldownTick == 0; }
     public boolean canUseMelee()   { return meleeCooldownTick == 0; }
     public boolean canUseSpecial() { return specialCooldownTick == 0; }
@@ -188,13 +254,12 @@ class MapUpdateListener implements Emitter.Listener {
     public boolean hasArmor(){return hero.getInventory().getArmor()!= null; }
 
     private void handleFight(GameMap gameMap, Player player) throws IOException {
-        Inventory inv = hero.getInventory();
         List<Player> otherPlayer = gameMap.getOtherPlayerInfo().stream().filter(p->p.getHealth()>0).toList();
         List<Weapon> myWeapon = getMyListReadyWeapon();
         int maxRange = myWeapon.stream().mapToInt(this::getRangeWeaponAHead).max().orElse(1);
         List<Player> playersInRange = otherPlayer.stream().filter(p ->
                 PathUtils.distance(player.getPosition(),p) <= maxRange
-                ).toList();
+        ).toList();
 
         Player target = playersInRange.stream().min(Comparator.comparingDouble(Player::getHealth)).get();
         restrictNode.remove(target);
@@ -203,13 +268,34 @@ class MapUpdateListener implements Emitter.Listener {
 
 
         if(currenWeapon !=null){
-            boolean canAttack = canShoot(player.getPosition(),target.getPosition(),maxRange);
+            boolean canAttack = canAttack(player.getPosition(),target.getPosition(),maxRange);
             String dir = getDirection(player.getPosition(), target.getPosition());
-            int dist =PathUtils.distance(player.getPosition(),target.getPosition());
 
             if (!canAttack) {
-                String pathToAttack = getPathToShoot(gameMap,player.getPosition(),target.getPosition(),maxRange);
-                hero.move(pathToAttack.substring(0,1));
+                if(currenWeapon.getId().equalsIgnoreCase("SCEPTER")
+                        || currenWeapon.getId().equalsIgnoreCase("CROSSBOW")
+                        || currenWeapon.getId().equalsIgnoreCase("RUBBER_GUN")
+                        || currenWeapon.getId().equalsIgnoreCase("SHOTGUN") && !canShoot(player,target,gameMap)){
+
+                    Node nodeToShoot = findShootingPosition(player,target,gameMap,getRangeWeaponAHead(currenWeapon),restrictNode);
+                    if(nodeToShoot!=null ){
+                        String pathToShoot = PathUtils.getShortestPath(gameMap,restrictNode,player.getPosition(),nodeToShoot,false);
+
+                        if(pathToShoot != null){
+                            hero.move(pathToShoot.substring(0,1));
+                        }else{
+                            doPreviousAction(gameMap,player);
+                        }
+
+                    }else{
+                        doPreviousAction(gameMap,player);
+                    }
+
+                }else{
+                    String pathToAttack = getPathToAttack(gameMap,player.getPosition(),target.getPosition(),maxRange);
+                    hero.move(pathToAttack.substring(0,1));
+                }
+
 
             }else{
                 System.out.printf("Hero dùng %s đánh Player[%d,%d]\n",
@@ -228,8 +314,9 @@ class MapUpdateListener implements Emitter.Listener {
                         || currenWeapon.getId().equalsIgnoreCase("CROSSBOW")
                         || currenWeapon.getId().equalsIgnoreCase("RUBBER_GUN")
                         || currenWeapon.getId().equalsIgnoreCase("SHOTGUN")){
-                    hero.shoot(dir);
-                    gunCooldownTick = (int)Math.ceil(currenWeapon.getCooldown());
+
+                        hero.shoot(dir);
+                        gunCooldownTick = (int)Math.ceil(currenWeapon.getCooldown());
                 }
                 if(currenWeapon.getId().equalsIgnoreCase("BANANA")
                         || currenWeapon.getId().equalsIgnoreCase("SMOKE")
@@ -306,7 +393,66 @@ class MapUpdateListener implements Emitter.Listener {
         // Thực hiện di chuyển
         hero.move(dir);
     }
-    public String getPathToShoot(GameMap gameMap, Node current, Node enemy, int range) {
+
+    public Node findShootingPosition(Player player, Player enemy, GameMap gameMap, int gunRange, List<Node> restrictNode) {
+        Node enemyPos = enemy.getPosition();
+        Node playerPos = player.getPosition();
+
+        List<Obstacle> blockBullets = gameMap.getListObstacles().stream()
+                .filter(ob -> !ob.getTag().contains(ObstacleTag.CAN_SHOOT_THROUGH))
+                .toList();
+
+        int mapSize = gameMap.getMapSize();
+
+        // Ưu tiên các hướng theo thứ tự: gần player hơn
+        // Duyệt 4 hướng: phải, trái, lên, xuống
+        int[] dx = {1, -1, 0, 0};
+        int[] dy = {0, 0, 1, -1};
+
+// Duyệt các ô cách enemy theo các hướng trong tầm bắn
+        for (int d = 0; d < 4; d++) {
+            for (int i = 1; i <= gunRange; i++) {
+                int nx = enemyPos.getX() + dx[d] * i;
+                int ny = enemyPos.getY() + dy[d] * i;
+
+                if (nx < 0 || ny < 0 || nx >= mapSize || ny >= mapSize) break;
+
+                Node shootPos = new Node(nx, ny);
+
+                // Nếu node không thể đứng được thì bỏ qua
+                if (restrictNode.contains(shootPos)) continue;
+
+                // Nếu từ node này có thể bắn enemy mà không bị vật cản
+                if (canShootFrom(shootPos, enemyPos, blockBullets)) {
+                    return shootPos;
+                }
+            }
+        }
+        return null; // Không có vị trí nào phù hợp
+    }
+
+    private boolean canShootFrom(Node from, Node to, List<Obstacle> blockObstacles) {
+        if (from.getX() != to.getX() && from.getY() != to.getY()) return false;
+
+        for (Obstacle ob : blockObstacles) {
+            Node pos = ob.getPosition();
+
+            if (from.getX() == to.getX()) { // cùng cột
+                if (pos.getX() == from.getX() && isBetween(pos.getY(), from.getY(), to.getY())) {
+                    return false;
+                }
+            } else { // cùng hàng
+                if (pos.getY() == from.getY() && isBetween(pos.getX(), from.getX(), to.getX())) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+
+    public String getPathToAttack(GameMap gameMap, Node current, Node enemy, int range) {
         List<Node> candidatePositions = new ArrayList<>();
         int x2 = enemy.getX();
         int y2 = enemy.getY();
@@ -346,7 +492,7 @@ class MapUpdateListener implements Emitter.Listener {
     }
 
 
-    public static boolean canShoot(Node player, Node enemy, int range) {
+    public static boolean canAttack(Node player, Node enemy, int range) {
         int x1 = player.getX(), y1 = player.getY();
         int x2 = enemy.getX(), y2 = enemy.getY();
 
@@ -361,6 +507,42 @@ class MapUpdateListener implements Emitter.Listener {
 
         return distance <= range;
     }
+    public boolean canShoot(Node player, Node enemy, GameMap gameMap) {
+        if (player.getX() != enemy.getX() && player.getY() != enemy.getY()) {
+            return false; // Không thể bắn chéo
+        }
+
+        // Lấy tất cả obstacle không thể bắn xuyên qua
+        List<Obstacle> allObstacles = gameMap.getListObstacles();
+        List<Obstacle> blockBullets = allObstacles.stream()
+                .filter(ob -> !ob.getTag().contains(ObstacleTag.CAN_SHOOT_THROUGH))
+                .toList();
+
+        // Kiểm tra có obstacle nằm giữa không
+        for (Obstacle ob : blockBullets) {
+            Node pos = ob.getPosition();
+
+            if (player.getX() == enemy.getX()) { // Cùng cột
+                if (pos.getX() == player.getX() &&
+                        isBetween(pos.getY(), player.getY(), enemy.getY())) {
+                    return false; // Có vật cản giữa
+                }
+            } else { // Cùng hàng
+                if (pos.getY() == player.getY() &&
+                        isBetween(pos.getX(), player.getX(), enemy.getX())) {
+                    return false; // Có vật cản giữa
+                }
+            }
+        }
+
+        return true; // Không có gì cản, có thể bắn
+    }
+
+    // Helper: kiểm tra giá trị có nằm giữa 2 điểm
+    private boolean isBetween(int mid, int a, int b) {
+        return (mid > Math.min(a, b) && mid < Math.max(a, b));
+    }
+
 
     private static String getDirection(Node p, Node e) {
         int dx = e.getX() - p.getX();
@@ -395,7 +577,7 @@ class MapUpdateListener implements Emitter.Listener {
         return 1;
     }
 
-    private List<Weapon> getMyListReadyWeapon(){
+    private List<Weapon> getMyListReadyWeapon( ){
         List<Weapon> result = new ArrayList<>();
         if(hasGun() && canUseGun() ){
             result.add(hero.getInventory().getGun());
@@ -610,12 +792,15 @@ class MapUpdateListener implements Emitter.Listener {
                         || inv.getMelee() == null
                         || !(inv.getArmor() != null || inv.getHelmet() != null)
                         || inv.getSpecial() ==null;
+        if(collectLootTargets(gameMap,player).isEmpty() || collectLootTargets(gameMap,player) == null){
+            needLoot = false;
+        }
 
         switch (phase) {
             case EARLY:
                 if (needRunBo) return "runBo";
                 if (enemyInRange) {
-                    if (hasGun()) return "fight";
+                    if (hasGun()|| hasThrowable()) return "fight";
                     return "hide";
                 }
                 if (needLoot) return "loot";
@@ -709,7 +894,7 @@ class MapUpdateListener implements Emitter.Listener {
         }
     }
 
-    public void handleLoot(GameMap gameMap, Player player){
+    public void handleLoot(GameMap gameMap, Player player) throws IOException {
         Node currentNode = new Node(player.getX(), player.getY());
         List<Node> targets = collectLootTargets(
                 gameMap,
@@ -763,6 +948,7 @@ class MapUpdateListener implements Emitter.Listener {
                             || armor.getId().equals("MAGIC_HELMET")
             );
         }
+
         if (!hasArmor()) {
             addTargetsFromList(
                     map.getListArmors(),
@@ -910,51 +1096,28 @@ class MapUpdateListener implements Emitter.Listener {
         }
         return escapePath;
     }
-    private String tryCorner(
-            GameMap map,
-            List<Node> restricted,
-            Node current,
-            int tx, int ty
-    ) {
-        Node corner = new Node(tx, ty);
-        return PathUtils.getShortestPath(map, restricted, current, corner, false);
-    }
+
 
     public boolean executePathOrLoot(
             GameMap map,
             Node current,
             String path
-    ) {
+    ) throws IOException {
         int x = current.x, y = current.y;
-
         if (currentNodeTarget!= null && PathUtils.distance(current, currentNodeTarget) == 0) {
-            try {
                 Element elem = map.getElementByIndex(x, y);
                 if (elem != null) {
-                    hero.pickupItem();
+                hero.pickupItem();
                 }
                 attackAdjacentChestsNoId(hero, map, x, y);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
             return false;
         }
         if (path != null && !path.isEmpty()) {
             String step = path.substring(0, 1);
-            try {
-                hero.move(step);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+            hero.move(step);
             return true;
         }
-
-        try {
             attackAdjacentChestsNoId(hero, map, x, y);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
         return false;
     }
      void attackAdjacentChestsNoId(Hero hero, GameMap gameMap, int px, int py) {
