@@ -969,6 +969,32 @@ class MapUpdateListener implements Emitter.Listener {
                 path
         );
     }
+
+
+    private boolean checkLootHealingItem(Element nextLootItem) {
+        Set<String> healingSet = Set.of("GOD_LEAF", "SPIRIT_TEAR", "MERMAID_TAIL", "PHOENIX_FEATHERS", "UNICORN_BLOOD");
+        Set<String> specialSet = Set.of("ELIXIR", "MAGIC", "ELIXIR_OF_LIFE", "COMPASS");
+
+        int healingCount = 0, specialCount = 0;
+
+        for (Element e : hero.getInventory().getListHealingItem()) {
+            String id = e.getId();
+            if (healingSet.contains(id)) healingCount++;
+            else if (specialSet.contains(id)) specialCount++;
+        }
+
+        int totalCount = healingCount + specialCount;
+        String nextId = nextLootItem.getId();
+
+        if (totalCount >= 4) return false;
+        if (healingSet.contains(nextId)) return healingCount < 2;
+        if (specialSet.contains(nextId)) return specialCount < 2;
+        return false;
+    }
+
+
+
+
     public List<Node> collectLootTargets(
             GameMap map,
             Node current
@@ -985,14 +1011,16 @@ class MapUpdateListener implements Emitter.Listener {
             return targets;
         }
 
-        if (hero.getInventory().getListHealingItem().size() <4) {
+        if (hero.getInventory().getListHealingItem().size() < 4) {
             addTargetsFromList(
                     map.getListHealingItems(),
                     item -> new Node(item.getX(), item.getY()),
                     map,
-                    targets
+                    targets,
+                    this::checkLootHealingItem
             );
         }
+
 
         if (!hasHelmet()) {
             addTargetsFromList(
@@ -1023,9 +1051,11 @@ class MapUpdateListener implements Emitter.Listener {
         if (!hasMelee()) {
             addTargetsFromList(map.getAllMelee(), w -> new Node(w.getX(), w.getY()), map, targets);
         }
-        if (!hasThrowable()) {
+        if (!hasThrowable() ||
+                (hasThrowable() && hero.getInventory().getThrowable().getId().equalsIgnoreCase("SMOKE"))) {
             addTargetsFromList(map.getAllThrowable(), w -> new Node(w.getX(), w.getY()), map, targets);
         }
+
         if(!hasSpecial()){
             addTargetsFromList(map.getAllSpecial(), w -> new Node(w.getX(), w.getY()), map, targets);
         }
@@ -1162,9 +1192,14 @@ class MapUpdateListener implements Emitter.Listener {
         int x = current.x, y = current.y;
         if (currentNodeTarget!= null && PathUtils.distance(current, currentNodeTarget) == 0) {
                 Element elem = map.getElementByIndex(x, y);
-                if (elem != null) {
-                hero.pickupItem();
+
+            if (elem != null) {
+                if (hasThrowable() && hero.getInventory().getThrowable().getId().equalsIgnoreCase("SMOKE") && canUseThrow()) {
+                    hero.throwItem("l", 3);
+                    throwCooldownTick = (int)Math.ceil(hero.getInventory().getThrowable().getCooldown());
                 }
+                hero.pickupItem();
+            }
                 attackAdjacentChestsNoId(hero, map, x, y);
             return false;
         }
