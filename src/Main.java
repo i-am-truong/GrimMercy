@@ -190,17 +190,37 @@ class MapUpdateListener implements Emitter.Listener {
     private void handleFight(GameMap gameMap, Player player) throws IOException {
         Inventory inv = hero.getInventory();
         List<Player> otherPlayer = gameMap.getOtherPlayerInfo().stream().filter(p->p.getHealth()>0).toList();
+
+        // --- SMOKE DEFENSE LOGIC ---
+        if (hasThrowable() && canUseThrow()
+                && hero.getInventory().getThrowable().getId().equalsIgnoreCase("SMOKE")
+                && shouldUseSmoke(player, otherPlayer)) {
+            String dir = getSmokeEscapeDirection(player, otherPlayer);
+            hero.throwItem(dir, getRangeWeaponAHead(hero.getInventory().getThrowable()));
+            throwCooldownTick = (int)Math.ceil(hero.getInventory().getThrowable().getCooldown());
+            // Sau khi ném SMOKE thì ưu tiên chạy trốn
+            dodgeOrRetreat(player, gameMap, otherPlayer.get(0).getPosition());
+            return;
+        }
+
         List<Weapon> myWeapon = getMyListReadyWeapon();
         int maxRange = myWeapon.stream().mapToInt(this::getRangeWeaponAHead).max().orElse(1);
         List<Player> playersInRange = otherPlayer.stream().filter(p ->
                 PathUtils.distance(player.getPosition(),p) <= maxRange
                 ).toList();
 
+        // Nếu không có ai trong tầm thì bỏ qua
+        if (playersInRange.isEmpty()) {
+            dodgeOrRetreat(player, gameMap, player.getPosition());
+            return;
+        }
+
         Player target = playersInRange.stream().min(Comparator.comparingDouble(Player::getHealth)).get();
         restrictNode.remove(target);
 
-        Weapon currenWeapon = myWeapon.stream().max(Comparator.comparingInt(Weapon::getDamage)).get();
-
+        Weapon currenWeapon = myWeapon.stream()
+                .filter(w -> !w.getId().equalsIgnoreCase("SMOKE")) // Không dùng SMOKE để tấn công!
+                .max(Comparator.comparingInt(Weapon::getDamage)).orElse(null);
 
         if(currenWeapon !=null){
             boolean canAttack = canShoot(player.getPosition(),target.getPosition(),maxRange);
@@ -232,7 +252,6 @@ class MapUpdateListener implements Emitter.Listener {
                     gunCooldownTick = (int)Math.ceil(currenWeapon.getCooldown());
                 }
                 if(currenWeapon.getId().equalsIgnoreCase("BANANA")
-                        || currenWeapon.getId().equalsIgnoreCase("SMOKE")
                         || currenWeapon.getId().equalsIgnoreCase("METEORITE_FRAGMENT")
                         || currenWeapon.getId().equalsIgnoreCase("CRYSTAL")
                         || currenWeapon.getId().equalsIgnoreCase("SEED")){
@@ -384,7 +403,6 @@ class MapUpdateListener implements Emitter.Listener {
         if (currenWeapon.getId().equalsIgnoreCase("SHOTGUN")) return 2;
 
         if (currenWeapon.getId().equalsIgnoreCase("BANANA")) return 6;
-        if (currenWeapon.getId().equalsIgnoreCase("SMOKE")) return 3;
         if (currenWeapon.getId().equalsIgnoreCase("METEORITE_FRAGMENT")) return 6;
         if (currenWeapon.getId().equalsIgnoreCase("CRYSTAL")) return 6;
         if (currenWeapon.getId().equalsIgnoreCase("SEED")) return 5;
@@ -709,7 +727,21 @@ class MapUpdateListener implements Emitter.Listener {
         }
     }
 
-    public void handleLoot(GameMap gameMap, Player player){
+    public void handleLoot(GameMap gameMap, Player player) throws IOException {
+        List<Player> otherPlayer = gameMap.getOtherPlayerInfo().stream().filter(p->p.getHealth()>0).toList();
+
+        // --- SMOKE COVER LOGIC WHEN LOOTING ---
+        if (hasThrowable() && canUseThrow()
+                && hero.getInventory().getThrowable().getId().equalsIgnoreCase("SMOKE")) {
+            boolean enemyNear = otherPlayer.stream().anyMatch(p -> PathUtils.distance(player.getPosition(), p.getPosition()) <= 5);
+            if (enemyNear) {
+                String dir = getSmokeEscapeDirection(player, otherPlayer);
+                hero.throwItem(dir, 3);
+                throwCooldownTick = (int)Math.ceil(hero.getInventory().getThrowable().getCooldown());
+                // Sau khi ném SMOKE thì tiếp tục loot (không tấn công)
+            }
+        }
+
         Node currentNode = new Node(player.getX(), player.getY());
         List<Node> targets = collectLootTargets(
                 gameMap,
@@ -986,7 +1018,28 @@ class MapUpdateListener implements Emitter.Listener {
         }
     }
 
+    // Helper: Kiểm tra có nên dùng SMOKE không
+    private boolean shouldUseSmoke(Player player, List<Player> others) {
+        boolean lowHealth = player.getHealth() < 100 * 0.4;
+        boolean enemyNear = others.stream().anyMatch(p -> PathUtils.distance(player.getPosition(), p.getPosition()) <= 5);
+        return lowHealth && enemyNear;
+    }
 
-
+    // Helper: Lấy hướng ném SMOKE để che giữa mình và địch gần nhất (ném ngược hướng địch)
+    private String getSmokeEscapeDirection(Player player, List<Player> others) {
+        Player nearest = others.stream()
+                .min(Comparator.comparingInt(p -> PathUtils.distance(player.getPosition(), p.getPosition())))
+                .orElse(null);
+        if (nearest == null) return "l"; // fallback
+        Node myPos = player.getPosition();
+        Node enemyPos = nearest.getPosition();
+        int dx = myPos.getX() - enemyPos.getX();
+        int dy = myPos.getY() - enemyPos.getY();
+        if (Math.abs(dx) >= Math.abs(dy)) {
+            return dx >= 0 ? "r" : "l";
+        } else {
+            return dy >= 0 ? "u" : "d";
+        }
+    }
 }
 
