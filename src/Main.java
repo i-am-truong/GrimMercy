@@ -20,7 +20,7 @@ import java.util.function.Predicate;
 
 public class Main {
     private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
-    private static final String GAME_ID = "198548";
+    private static final String GAME_ID = "183615";
     private static final String PLAYER_NAME = "NeuroSama";
     private static final String SECRET_KEY = "sk-I66yrGdORXWDWQfpd4qtDA:vVGI_F8vMzFIdjgOH_nnMFp6WkRcYVnXZ9UwiHbPyRqjvTfelockEHJAYgCCZXKax-8jSJCb1HhBGt5ctIUN0A";
 
@@ -30,6 +30,7 @@ public class Main {
         hero.setOnMapUpdate(onMapUpdate);
         hero.start(SERVER_URL);
     }
+
 }
 
 class MapUpdateListener implements Emitter.Listener {
@@ -739,12 +740,18 @@ class MapUpdateListener implements Emitter.Listener {
         }
         nodes.addAll(gameMap.getOtherPlayerInfo());
         restrictNode.addAll(nodes);
+        restrictNode.removeAll(gameMap.getListChests().stream().filter(o->o.getHp()<=0).toList());
+        restrictNode.addAll(gameMap.getListEnemies());
         addEnemyToRestrict(gameMap,player);
     }
 
     public String getDecisionForNextStep(GameMap gameMap, Player player) {
         if (player == null || player.getHealth() <= 0) {
             return "die";
+        }
+        if(!PathUtils.checkInsideSafeArea(player.getPosition(),gameMap.getSafeZone(),gameMap.getMapSize())){
+            System.out.println("vao day thi con js lam an nhu lon");
+            return "runBo";
         }
         int mapSize     = gameMap.getMapSize();
         double tickDur  = 0.5;
@@ -770,9 +777,7 @@ class MapUpdateListener implements Emitter.Listener {
         System.out.println("remaining: " +remaining);
 
         int x = player.getX(), y = player.getY();
-        boolean needRunBo = false;
-
-         needRunBo = !checkInsideSafeArea(new Node(x, y), gameMap.getSafeZone()-8, gameMap.getMapSize())
+        boolean needRunBo = !checkInsideSafeArea(new Node(x, y), gameMap.getSafeZone()-8, gameMap.getMapSize())
             && isShrinking;
 
         Inventory inv = hero.getInventory();
@@ -818,21 +823,35 @@ class MapUpdateListener implements Emitter.Listener {
                 needLoot = true;
             }
         }
-        // neu ca loot va enemy
-        if(needLoot && enemyInRange){
-            if(currentNodeTarget == null){
-                needLoot =false;
-            }else{
-                int distanceWithLoot = PathUtils.distance(player.getPosition(),currentNodeTarget);
-                int distanceWithEnemy = PathUtils.distance(player.getPosition(),closest.getPosition());
-                if(distanceWithLoot <=2 && distanceWithEnemy>=5){
+        // Nếu vừa muốn loot vừa có enemy trong tầm
+        if (needLoot && enemyInRange) {
+            if (currentNodeTarget == null) {
+                needLoot = false; // Không có gì để loot
+            } else {
+                int distanceWithLoot = PathUtils.distance(player.getPosition(), currentNodeTarget);
+                int distanceWithEnemy = PathUtils.distance(player.getPosition(), closest.getPosition());
+
+                if (distanceWithEnemy <= 3) {
+                    // Địch rất gần → Ưu tiên chiến
+                    needLoot = false;
+                }
+                else if (distanceWithLoot <= 2 && distanceWithEnemy > 6) {
+                    // Loot gần, enemy không đe dọa → ưu tiên loot
                     enemyInRange = false;
-                } else {
+                }
+                else if (distanceWithEnemy >= 8 && distanceWithEnemy <= 12) {
+                    // Địch trong tầm bắn xa → ưu tiên chiến
+                    needLoot = false;
+                }
+                else if (distanceWithEnemy > 12 && distanceWithLoot <= 5) {
+                    // Địch rất xa, loot hơi gần → loot
+                    enemyInRange = false;
+                }
+                else {
+                    // Trường hợp mơ hồ → chọn ưu tiên mặc định, ví dụ ưu tiên đánh
                     needLoot = false;
                 }
             }
-
-
         }
 
         switch (phase) {
@@ -844,15 +863,8 @@ class MapUpdateListener implements Emitter.Listener {
                 }
                 if (needLoot) return "loot";
                 return "hide";
-            case MID:
+            case MID, LATE:
                 if (needRunBo) return "runBo";
-                if (canHeal) return "heal";
-                if (enemyInRange) return "fight";
-                if (needLoot) return "loot";
-                return "hunting";
-            case LATE:
-                if (needRunBo) return "runBo";
-                if (player.getHealth() < 100 * 0.3) return "hide";
                 if (canHeal) return "heal";
                 if (enemyInRange) return "fight";
                 if (needLoot) return "loot";
