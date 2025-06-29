@@ -20,8 +20,8 @@ import java.util.function.Predicate;
 
 public class Main {
     private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
-    private static final String GAME_ID = "151612";
-    private static final String PLAYER_NAME = "4nim0sity";
+    private static final String GAME_ID = "118321";
+    private static final String PLAYER_NAME = "NeuroSama";
     private static final String SECRET_KEY = "sk-I66yrGdORXWDWQfpd4qtDA:vVGI_F8vMzFIdjgOH_nnMFp6WkRcYVnXZ9UwiHbPyRqjvTfelockEHJAYgCCZXKax-8jSJCb1HhBGt5ctIUN0A";
 
     public static void main(String[] args) throws IOException {
@@ -264,7 +264,7 @@ class MapUpdateListener implements Emitter.Listener {
 
         Player target = playersInRange.stream().min(Comparator.comparingDouble(Player::getHealth)).get();
         restrictNode.remove(target);
-        restrictNode.addAll(gameMap.getListChests());
+        restrictNode.addAll(gameMap.getListChests().stream().filter(o->o.getHp()>0).toList());
         int distanceWithTarget = PathUtils.distance(player.getPosition(),target.getPosition());
         List<Weapon> myWeaponCanUse = getMyListReadyCanUseToFight(player,target,gameMap)
                 .stream().filter(w-> getRangeWeaponAHead(w) >= distanceWithTarget).toList();
@@ -794,17 +794,31 @@ class MapUpdateListener implements Emitter.Listener {
 
         boolean canHeal = !inv.getListHealingItem().isEmpty()
                 && player.getHealth() < 100 * 0.7;
-
-        boolean needLoot =
-                inv.getGun() == null
-                        || inv.getThrowable() == null
-                        || inv.getListHealingItem().size() < 4
-                        || inv.getMelee() == null
-                        || !(inv.getArmor() != null || inv.getHelmet() != null)
-                        || inv.getSpecial() ==null;
-        if(collectLootTargets(gameMap,player).isEmpty() || collectLootTargets(gameMap,player) == null){
-            needLoot = false;
+    // condition for loot
+        boolean needLoot = false;
+        if (!hasGun() && gameMap.getAllGun() != null) {
+            needLoot = true;
         }
+        boolean chestExists = gameMap.getListChests().stream()
+                .anyMatch(o -> o.getHp() > 0);
+        if(chestExists){
+            if (!hasThrowable() && gameMap.getAllThrowable() != null) {
+                needLoot = true;
+            }
+            if (!hasHealingItem() && gameMap.getListHealingItems() != null) {
+                needLoot = true;
+            }
+            if (!hasMelee() && gameMap.getAllMelee() !=null) {
+                needLoot = true;
+            }
+            if ((!hasArmor() && !hasHelmet()) && gameMap.getListArmors() != null) {
+                needLoot = true;
+            }
+            if (!hasSpecial() && gameMap.getAllSpecial() != null) {
+                needLoot = true;
+            }
+        }
+        
 
         switch (phase) {
             case EARLY:
@@ -831,6 +845,7 @@ class MapUpdateListener implements Emitter.Listener {
         }
         return "default";
     }
+
 
     public static boolean checkInsideSafeArea(Node current, int safeZone, int mapSize) {
         int center = mapSize / 2;
