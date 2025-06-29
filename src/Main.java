@@ -20,7 +20,7 @@ import java.util.function.Predicate;
 
 public class Main {
     private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
-    private static final String GAME_ID = "118321";
+    private static final String GAME_ID = "198548";
     private static final String PLAYER_NAME = "NeuroSama";
     private static final String SECRET_KEY = "sk-I66yrGdORXWDWQfpd4qtDA:vVGI_F8vMzFIdjgOH_nnMFp6WkRcYVnXZ9UwiHbPyRqjvTfelockEHJAYgCCZXKax-8jSJCb1HhBGt5ctIUN0A";
 
@@ -818,7 +818,22 @@ class MapUpdateListener implements Emitter.Listener {
                 needLoot = true;
             }
         }
-        
+        // neu ca loot va enemy
+        if(needLoot && enemyInRange){
+            if(currentNodeTarget == null){
+                needLoot =false;
+            }else{
+                int distanceWithLoot = PathUtils.distance(player.getPosition(),currentNodeTarget);
+                int distanceWithEnemy = PathUtils.distance(player.getPosition(),closest.getPosition());
+                if(distanceWithLoot <=2 && distanceWithEnemy>=5){
+                    enemyInRange = false;
+                } else {
+                    needLoot = false;
+                }
+            }
+
+
+        }
 
         switch (phase) {
             case EARLY:
