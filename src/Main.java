@@ -304,6 +304,11 @@ class MapUpdateListener implements Emitter.Listener {
         }
 
         Player target = playersInRange.stream().min(Comparator.comparingDouble(Player::getHealth)).orElse(null);
+        if (target == null) {
+            // No valid target found, retreat or handle gracefully
+            dodgeOrRetreat(player, gameMap, player.getPosition());
+            return;
+        }
         restrictNode.remove(target);
         restrictNode.addAll(gameMap.getListChests().stream().filter(o->o.getHp()>0).toList());
         int distanceWithTarget = PathUtils.distance(player.getPosition(),target.getPosition());
