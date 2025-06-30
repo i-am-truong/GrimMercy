@@ -44,7 +44,6 @@ class MapUpdateListener implements Emitter.Listener {
 
     private int currentStep = 0;
     private final List<Node> restrictNode = new ArrayList<>();
-    private final Set<String> restrictNodeSet = new HashSet<>();
     private static Node currentNodeTarget = null;
     private boolean[] gocFlags = {true, false, false, false};
     //    to condition to runBo
