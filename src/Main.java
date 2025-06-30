@@ -59,7 +59,8 @@ class MapUpdateListener implements Emitter.Listener {
     private static final int[] enemyMaxEdge = new int[100];
     private static final int[] toado = new int[100];
 
-    List<String> listHealingSupportItem = new ArrayList<>();
+    List<String> listHealingInventory = new ArrayList<>();
+    List<String> listSupportInventory = new ArrayList<>();
     Set<String> healingSet = Set.of("GOD_LEAF", "SPIRIT_TEAR", "MERMAID_TAIL", "PHOENIX_FEATHERS", "UNICORN_BLOOD");
     Set<String> specialSet = Set.of("ELIXIR", "MAGIC", "ELIXIR_OF_LIFE", "COMPASS");
 //    List<String>
@@ -109,7 +110,6 @@ class MapUpdateListener implements Emitter.Listener {
             case "runBo" -> handleRunBo(gameMap, player);
             case "fight"-> handleFight(gameMap,player);
             case "hide" -> handleHide(gameMap, player);
-            case "heal" -> handleHeal(gameMap, player);
             case "loot" -> handleLoot(gameMap, player);
             case "hunting" -> handleHunting(gameMap, player);
             default -> System.out.println("Unexpected decision: " + currentDecision );
@@ -132,11 +132,6 @@ class MapUpdateListener implements Emitter.Listener {
 
     public void handleDie(){
         currentNodeTarget = null;
-        String healOrSupportSlot1ID = null;
-        String healOrSupportSlot2ID = null;
-        String healOrSupportSlot3ID = null;
-        String healOrSupportSlot4ID = null;
-
         gocFlags = new boolean[]{ true, false, false, false };
         resetCooldowns();
     }
@@ -227,7 +222,6 @@ class MapUpdateListener implements Emitter.Listener {
                 }
             }
         }
-
         // Nếu không tìm được (do restrict hoặc enemy áp đảo), thì về gần tâm
         return safestNode != null ? safestNode : new Node(centerX, centerY);
     }
@@ -249,10 +243,15 @@ class MapUpdateListener implements Emitter.Listener {
             && !"HAND".equalsIgnoreCase(hero.getInventory().getMelee().getId()); }
     public boolean hasSpecial(){return hero.getInventory().getSpecial()!= null;}
     public boolean hasHealingItem(){
-
-        return
-            !hero.getInventory().getListHealingItem().isEmpty();
+        return hero.getInventory().getListHealingItem().stream()
+                .anyMatch(item -> healingSet.contains(item.getId()));
     }
+
+    public boolean hasSupportItem() {
+        return hero.getInventory().getListHealingItem().stream()
+                .anyMatch(item -> specialSet.contains(item.getId()));
+    }
+
     public boolean hasHelmet(){return hero.getInventory().getHelmet()!= null; }
     public boolean hasArmor(){return hero.getInventory().getArmor()!= null; }
 
@@ -757,8 +756,7 @@ class MapUpdateListener implements Emitter.Listener {
         List<Weapon> myWeaponCanUse = getMyListReadyCanUseToFight(player,closest,gameMap);
         boolean enemyInRange = closest != null && !myWeaponCanUse.isEmpty();
 
-        boolean canHeal = hasHealingItem()
-                && player.getHealth() < 100 * 0.9;
+
         // condition for loot
         boolean needLoot = false;
         if (!hasGun() && gameMap.getAllGun() != null) {
@@ -835,7 +833,6 @@ class MapUpdateListener implements Emitter.Listener {
         }
 
         if (needRunBo) return "runBo";
-        if (canHeal) return "heal";
         if (enemyInRange) return "fight";
         if (needLoot) return "loot";
         return "hunting";
@@ -894,12 +891,6 @@ class MapUpdateListener implements Emitter.Listener {
         return closest != null ? closest : new Node(centerX, centerY);
     }
 
-    private void handleHeal(GameMap gameMap, Player player) throws IOException {
-        if(hasHealingItem()){
-            hero.useItem(hero.getInventory().getListHealingItem().getFirst().getId());
-        }
-
-    }
     private void handleHunting(GameMap gameMap, Player player) throws IOException {
         Player closestPlayer = gameMap.getOtherPlayerInfo().stream()
                 .filter(p -> p.getHealth() > 0)
@@ -915,6 +906,20 @@ class MapUpdateListener implements Emitter.Listener {
     }
 
     public void handleLoot(GameMap gameMap, Player player) throws IOException {
+
+        boolean canHeal = hasHealingItem()
+                && player.getHealth() < 100 * 0.9;
+        if(canHeal){
+            List<String> supportPriority = Arrays.asList(
+                    "ELIXIR_OF_LIFE", "GOD_LEAF","SPIRIT_TEAR", "MERMAID_TAIL", "PHOENIX_FEATHERS","UNICORN_BLOOD"
+            );
+            for (Element e : hero.getInventory().getListHealingItem()) {
+                if (supportPriority.contains(e.getId())) {
+                    hero.useItem(e.getId());
+                    return;
+                }
+            }
+        }
 
         List<Player> otherPlayer = gameMap.getOtherPlayerInfo().stream().filter(p->p.getHealth()>0).toList();
 
@@ -1205,7 +1210,15 @@ class MapUpdateListener implements Emitter.Listener {
                         hero.pickupItem();
                     }
                 }
+
+
                 hero.pickupItem();
+                if(healingSet.contains(elem.getId())){
+                    listHealingInventory.add(elem.getId());
+                }
+                if(specialSet.contains(elem.getId())){
+                    listSupportInventory.add(elem.getId());
+                }
             }
             attackAdjacentChestsNoId(hero, map, x, y);
             return false;
