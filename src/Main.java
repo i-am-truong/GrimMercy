@@ -22,7 +22,7 @@ import java.util.function.Predicate;
 
 public class Main {
     private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
-    private static final String GAME_ID = "113315";
+    private static final String GAME_ID = "101102";
     private static final String PLAYER_NAME = "NeuroSama";
     private static final String SECRET_KEY = "sk-I66yrGdORXWDWQfpd4qtDA:vVGI_F8vMzFIdjgOH_nnMFp6WkRcYVnXZ9UwiHbPyRqjvTfelockEHJAYgCCZXKax-8jSJCb1HhBGt5ctIUN0A";
 
@@ -88,7 +88,7 @@ class MapUpdateListener implements Emitter.Listener {
         if(hasThrowable()){
             Weapon currentThrow = hero.getInventory().getThrowable();
             if(currentThrow!= null && currentThrow.getId().equalsIgnoreCase("SMOKE")){
-                hero.throwItem("l",1);
+                hero.revokeItem("SMOKE");
             }
         }
 //        end tam thoi tranh loi
