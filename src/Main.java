@@ -6,6 +6,7 @@ import jsclub.codefest.sdk.model.Element;
 import jsclub.codefest.sdk.model.GameMap;
 import jsclub.codefest.sdk.model.Inventory;
 import jsclub.codefest.sdk.model.equipments.Armor;
+import jsclub.codefest.sdk.model.equipments.HealingItem;
 import jsclub.codefest.sdk.model.npcs.Enemy;
 import jsclub.codefest.sdk.model.obstacles.Obstacle;
 import jsclub.codefest.sdk.model.obstacles.ObstacleTag;
@@ -22,7 +23,7 @@ import java.util.function.Predicate;
 
 public class Main {
     private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
-    private static final String GAME_ID = "132228";
+    private static final String GAME_ID = "186616";
     private static final String PLAYER_NAME = "NeuroSama";
     private static final String SECRET_KEY = "sk-I66yrGdORXWDWQfpd4qtDA:vVGI_F8vMzFIdjgOH_nnMFp6WkRcYVnXZ9UwiHbPyRqjvTfelockEHJAYgCCZXKax-8jSJCb1HhBGt5ctIUN0A";
 
@@ -43,9 +44,7 @@ class MapUpdateListener implements Emitter.Listener {
     private final Hero hero;
 
     private int currentStep = 0;
-    private List<Node> restrictNode = new ArrayList<>();
-    private static Player savedTarget = null;
-    private static String savedName = null;
+    private final List<Node> restrictNode = new ArrayList<>();
     private static Node currentNodeTarget = null;
     private boolean[] gocFlags = {true, false, false, false};
     //    to condition to runBo
@@ -54,18 +53,16 @@ class MapUpdateListener implements Emitter.Listener {
     private Node safeNodeToRunBo = null;
     //    restrict node
     static List<Enemy> listNodeEnemySave = new ArrayList<>();
-    private static String[] enemyDirection = new String[100];
-    private static Boolean[][][] enemyMap = new Boolean[121][121][100];
-    private static int enemyMinEdge[] = new int[100];
-    private static int enemyMaxEdge[] = new int[100];
-    private static int[] toado = new int[100];
-    private String previousDecision = null;
-    private String lastDecision = null;
+    private static final String[] enemyDirection = new String[100];
+    private static final Boolean[][][] enemyMap = new Boolean[121][121][100];
+    private static final int[] enemyMinEdge = new int[100];
+    private static final int[] enemyMaxEdge = new int[100];
+    private static final int[] toado = new int[100];
 
-    private String healOrSupportSlot1ID = null;
-    private String healOrSupportSlot2ID = null;
-    private String healOrSupportSlot3ID = null;
-    private String healOrSupportSlot4ID = null;
+    List<String> listHealingSupportItem = new ArrayList<>();
+    Set<String> healingSet = Set.of("GOD_LEAF", "SPIRIT_TEAR", "MERMAID_TAIL", "PHOENIX_FEATHERS", "UNICORN_BLOOD");
+    Set<String> specialSet = Set.of("ELIXIR", "MAGIC", "ELIXIR_OF_LIFE", "COMPASS");
+//    List<String>
     @Override
     public void call(Object... args) {
         try {
@@ -117,15 +114,6 @@ class MapUpdateListener implements Emitter.Listener {
             case "hunting" -> handleHunting(gameMap, player);
             default -> System.out.println("Unexpected decision: " + currentDecision );
         }
-        if(currentStep == 0){
-            previousDecision =currentDecision;
-        }
-
-        if (lastDecision != null && !currentDecision.equalsIgnoreCase(lastDecision) &&
-                !lastDecision.equalsIgnoreCase("die")) {
-            previousDecision = lastDecision;
-        }
-        lastDecision = currentDecision;
 
 
         System.out.println("=============DEBUG_PART (" + currentStep + ")=================");
@@ -141,20 +129,8 @@ class MapUpdateListener implements Emitter.Listener {
         System.out.println("left element: " + gameMap.getElementByIndex(player.getX()-1,player.getY()).getId());
         System.out.println("Current Node loot Target : "+ currentNodeTarget);
     }
-    public void doPreviousAction(GameMap gameMap, Player player) throws IOException {
-        switch (previousDecision) {
-            case "runBo" -> handleRunBo(gameMap, player);
-            case "fight"-> handleFight(gameMap,player);
-            case "heal" -> handleHeal(gameMap, player);
-            case "loot" -> handleLoot(gameMap, player);
-            case "hunting" -> handleHunting(gameMap, player);
-            default -> handleHide(gameMap, player);
-        }
-    }
 
     public void handleDie(){
-        savedTarget = null;
-        savedName = null;
         currentNodeTarget = null;
         String healOrSupportSlot1ID = null;
         String healOrSupportSlot2ID = null;
@@ -272,7 +248,11 @@ class MapUpdateListener implements Emitter.Listener {
     public boolean hasMelee(){ return hero.getInventory().getMelee() != null
             && !"HAND".equalsIgnoreCase(hero.getInventory().getMelee().getId()); }
     public boolean hasSpecial(){return hero.getInventory().getSpecial()!= null;}
-    public boolean hasHealingItem(){return !hero.getInventory().getListHealingItem().isEmpty(); }
+    public boolean hasHealingItem(){
+
+        return
+            !hero.getInventory().getListHealingItem().isEmpty();
+    }
     public boolean hasHelmet(){return hero.getInventory().getHelmet()!= null; }
     public boolean hasArmor(){return hero.getInventory().getArmor()!= null; }
 
@@ -435,64 +415,6 @@ class MapUpdateListener implements Emitter.Listener {
         hero.move(dir);
     }
 
-    public Node findShootingPosition(Player player, Player enemy, GameMap gameMap, int gunRange, List<Node> restrictNode) {
-        Node enemyPos = enemy.getPosition();
-        Node playerPos = player.getPosition();
-
-        List<Obstacle> blockBullets = gameMap.getListObstacles().stream()
-                .filter(ob -> !ob.getTag().contains(ObstacleTag.CAN_SHOOT_THROUGH))
-                .toList();
-
-        int mapSize = gameMap.getMapSize();
-
-        // Ưu tiên các hướng theo thứ tự: gần player hơn
-        // Duyệt 4 hướng: phải, trái, lên, xuống
-        int[] dx = {1, -1, 0, 0};
-        int[] dy = {0, 0, 1, -1};
-
-// Duyệt các ô cách enemy theo các hướng trong tầm bắn
-        for (int d = 0; d < 4; d++) {
-            for (int i = 1; i <= gunRange; i++) {
-                int nx = enemyPos.getX() + dx[d] * i;
-                int ny = enemyPos.getY() + dy[d] * i;
-
-                if (nx < 0 || ny < 0 || nx >= mapSize || ny >= mapSize) break;
-
-                Node shootPos = new Node(nx, ny);
-
-                // Nếu node không thể đứng được thì bỏ qua
-                if (restrictNode.contains(shootPos)) continue;
-
-                // Nếu từ node này có thể bắn enemy mà không bị vật cản
-                if (canShootFrom(shootPos, enemyPos, blockBullets)) {
-                    return shootPos;
-                }
-            }
-        }
-        return null; // Không có vị trí nào phù hợp
-    }
-
-    private boolean canShootFrom(Node from, Node to, List<Obstacle> blockObstacles) {
-        if (from.getX() != to.getX() && from.getY() != to.getY()) return false;
-
-        for (Obstacle ob : blockObstacles) {
-            Node pos = ob.getPosition();
-
-            if (from.getX() == to.getX()) { // cùng cột
-                if (pos.getX() == from.getX() && isBetween(pos.getY(), from.getY(), to.getY())) {
-                    return false;
-                }
-            } else { // cùng hàng
-                if (pos.getY() == from.getY() && isBetween(pos.getX(), from.getX(), to.getX())) {
-                    return false;
-                }
-            }
-        }
-
-        return true;
-    }
-
-
     public String getPathToAttack(GameMap gameMap, Node current, Node enemy, int range) {
         List<Node> candidatePositions = new ArrayList<>();
         int x2 = enemy.getX();
@@ -502,8 +424,7 @@ class MapUpdateListener implements Emitter.Listener {
         for (int dx = -range; dx <= range; dx++) {
             if (dx == 0) continue;
             int x = x2 + dx;
-            int y = y2;
-            Node curNode = new Node(x,y);
+            Node curNode = new Node(x,y2);
             if (Math.abs(dx) <= range && x >= 0 && x < gameMap.getMapSize()
             && PathUtils.checkInsideSafeArea(curNode,gameMap.getSafeZone(),gameMap.getMapSize())) {
                 candidatePositions.add(curNode);
@@ -513,12 +434,11 @@ class MapUpdateListener implements Emitter.Listener {
         // Xét tất cả vị trí trong tầm range trên cùng cột
         for (int dy = -range; dy <= range; dy++) {
             if (dy == 0) continue;
-            int x = x2;
             int y = y2 + dy;
-            Node curNode = new Node(x,y);
+            Node curNode = new Node(x2,y);
             if (Math.abs(dy) <= range && y >= 0 && y < gameMap.getMapSize()
             && PathUtils.checkInsideSafeArea(curNode,gameMap.getSafeZone(),gameMap.getMapSize())) {
-                candidatePositions.add(new Node(x, y));
+                candidatePositions.add(curNode);
             }
         }
 
@@ -847,6 +767,8 @@ class MapUpdateListener implements Emitter.Listener {
         boolean chestExists = gameMap.getListChests().stream()
                 .anyMatch(o -> o.getHp() > 0);
         if(chestExists){
+            needLoot = true;
+        }
             if (!hasThrowable() && gameMap.getAllThrowable() != null) {
                 needLoot = true;
             }
@@ -880,7 +802,7 @@ class MapUpdateListener implements Emitter.Listener {
             if (!hasSpecial() && gameMap.getAllSpecial() != null) {
                 needLoot = true;
             }
-        }
+//        end condition loot
         // Nếu vừa muốn loot vừa có enemy trong tầm
         if (needLoot && enemyInRange) {
             if (currentNodeTarget == null) {
@@ -1029,9 +951,6 @@ class MapUpdateListener implements Emitter.Listener {
 
 
     private boolean checkLootHealingItem(Element nextLootItem) {
-        Set<String> healingSet = Set.of("GOD_LEAF", "SPIRIT_TEAR", "MERMAID_TAIL", "PHOENIX_FEATHERS", "UNICORN_BLOOD");
-        Set<String> specialSet = Set.of("ELIXIR", "MAGIC", "ELIXIR_OF_LIFE", "COMPASS");
-
         int healingCount = 0, specialCount = 0;
 
         for (Element e : hero.getInventory().getListHealingItem()) {
@@ -1048,9 +967,6 @@ class MapUpdateListener implements Emitter.Listener {
         if (specialSet.contains(nextId)) return specialCount < 2;
         return false;
     }
-
-
-
 
     public List<Node> collectLootTargets(
             GameMap map,
@@ -1077,7 +993,6 @@ class MapUpdateListener implements Emitter.Listener {
                     this::checkLootHealingItem
             );
         }
-
 
         if (!hasHelmet()) {
             addTargetsFromList(
@@ -1125,8 +1040,6 @@ class MapUpdateListener implements Emitter.Listener {
                 );
             }
         }
-
-
         // 4) Vũ khí thiếu
         if (!hasGun()) {
             addTargetsFromList(map.getAllGun(), w -> new Node(w.getX(), w.getY()), map, targets);
@@ -1209,9 +1122,6 @@ class MapUpdateListener implements Emitter.Listener {
                     } else {
                         result.add(new Node(cx + (cx < x ? 1 : -1), cy));
                     }
-//                    result.add(new Node(c.getX(), c.getY() - 1)); // ô phía trên
-//                    result.add(new Node(c.getX(), c.getY() + 1)); // ô phía dưới
-
                 }
             }
             if (!result.isEmpty()) break;
@@ -1245,7 +1155,6 @@ class MapUpdateListener implements Emitter.Listener {
         }
         int size = map.getMapSize();
         String escapePath = null;
-        // Góc 1: dưới-trái; 2: dưới-phải; 3: trên-phải; 4: trên-trái
         if (gocFlags[0]) {
             escapePath = tryCorner(map, restrictNode, current, size / 2 - 1, size / 2 - 1);
             gocFlags[0] = false;
@@ -1285,6 +1194,7 @@ class MapUpdateListener implements Emitter.Listener {
                     Armor currentArmor = hero.getInventory().getArmor();
                     if(currentArmor !=null && currentArmor.getId().equalsIgnoreCase("ARMOR")){
                         hero.revokeItem("ARMOR");
+                        hero.pickupItem();
                     }
                 }
 
@@ -1292,10 +1202,9 @@ class MapUpdateListener implements Emitter.Listener {
                     Armor currentHelmet = hero.getInventory().getHelmet();
                     if (currentHelmet != null && currentHelmet.getId().equalsIgnoreCase("WOODEN_HELMET")) {
                         hero.revokeItem("WOODEN_HELMET");
+                        hero.pickupItem();
                     }
                 }
-
-
                 hero.pickupItem();
             }
             attackAdjacentChestsNoId(hero, map, x, y);
@@ -1327,14 +1236,6 @@ class MapUpdateListener implements Emitter.Listener {
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
-        }
-    }
-
-    private void revokeItem(String ItemId){
-        try{
-            hero.revokeItem(ItemId);
-        }catch (Exception e){
-            e.printStackTrace();
         }
     }
 
