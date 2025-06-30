@@ -263,18 +263,6 @@ class MapUpdateListener implements Emitter.Listener {
     private void handleFight(GameMap gameMap, Player player) throws IOException {
         List<Player> otherPlayer = gameMap.getOtherPlayerInfo().stream().filter(p->p.getHealth()>0).toList();
 
-        // --- SMOKE DEFENSE LOGIC ---
-        if (hasThrowable() && canUseThrow()
-                && hero.getInventory().getThrowable().getId().equalsIgnoreCase("SMOKE")
-                && shouldUseSmoke(player, otherPlayer)) {
-            String dir = getSmokeEscapeDirection(player, otherPlayer);
-            hero.throwItem(dir, getRangeWeaponAHead(hero.getInventory().getThrowable()));
-            throwCooldownTick = (int)Math.ceil(hero.getInventory().getThrowable().getCooldown());
-            // Sau khi ném SMOKE thì ưu tiên chạy trốn
-            dodgeOrRetreat(player, gameMap, otherPlayer.get(0).getPosition());
-            return;
-        }
-
         // --- SUPPORT ITEM LOGIC ---
         // Nếu máu thấp và có support item (healing/special) thì dùng trước khi đánh
         if (hasHealingItem() && player.getHealth() < 100 * 0.7) {
@@ -948,29 +936,15 @@ class MapUpdateListener implements Emitter.Listener {
 
         boolean canHeal = hasHealingItem()
                 && player.getHealth() < 100 * 0.9;
-        if(canHeal){
+        if(canHeal) {
             List<String> supportPriority = Arrays.asList(
-                    "ELIXIR_OF_LIFE", "GOD_LEAF","SPIRIT_TEAR", "MERMAID_TAIL", "PHOENIX_FEATHERS","UNICORN_BLOOD"
+                    "ELIXIR_OF_LIFE", "GOD_LEAF", "SPIRIT_TEAR", "MERMAID_TAIL", "PHOENIX_FEATHERS", "UNICORN_BLOOD"
             );
             for (Element e : hero.getInventory().getListHealingItem()) {
                 if (supportPriority.contains(e.getId())) {
                     hero.useItem(e.getId());
                     return;
                 }
-            }
-        }
-
-        List<Player> otherPlayer = gameMap.getOtherPlayerInfo().stream().filter(p->p.getHealth()>0).toList();
-
-        // --- SMOKE COVER LOGIC WHEN LOOTING ---
-        if (hasThrowable() && canUseThrow()
-                && hero.getInventory().getThrowable().getId().equalsIgnoreCase("SMOKE")) {
-            boolean enemyNear = otherPlayer.stream().anyMatch(p -> PathUtils.distance(player.getPosition(), p.getPosition()) <= 5);
-            if (enemyNear) {
-                String dir = getSmokeEscapeDirection(player, otherPlayer);
-                hero.throwItem(dir, 3);
-                throwCooldownTick = (int)Math.ceil(hero.getInventory().getThrowable().getCooldown());
-                // Sau khi ném SMOKE thì tiếp tục loot (không tấn công)
             }
         }
 
@@ -1091,8 +1065,7 @@ class MapUpdateListener implements Emitter.Listener {
         if (!hasMelee()) {
             addTargetsFromList(map.getAllMelee(), w -> new Node(w.getX(), w.getY()), map, targets);
         }
-        if (!hasThrowable() ||
-                (hasThrowable() && hero.getInventory().getThrowable().getId().equalsIgnoreCase("SMOKE"))) {
+        if (!hasThrowable() ) {
             addTargetsFromList(map.getAllThrowable(), w -> new Node(w.getX(), w.getY()), map, targets);
         }
 
@@ -1230,10 +1203,7 @@ class MapUpdateListener implements Emitter.Listener {
             Element elem = map.getElementByIndex(x, y);
 
             if (elem != null) {
-                if (hasThrowable() && hero.getInventory().getThrowable().getId().equalsIgnoreCase("SMOKE") && canUseThrow()) {
-                    hero.throwItem("l", 1);
-                    throwCooldownTick = (int)Math.ceil(hero.getInventory().getThrowable().getCooldown());
-                }
+
                 if(elem.getId().equalsIgnoreCase("MAGIC_ARMOR")){
                     Armor currentArmor = hero.getInventory().getArmor();
                     if(currentArmor !=null && currentArmor.getId().equalsIgnoreCase("ARMOR")){
@@ -1291,27 +1261,4 @@ class MapUpdateListener implements Emitter.Listener {
         }
     }
 
-    // Helper: Kiểm tra có nên dùng SMOKE không
-    private boolean shouldUseSmoke(Player player, List<Player> others) {
-        boolean lowHealth = player.getHealth() < 100 * 0.4;
-        boolean enemyNear = others.stream().anyMatch(p -> PathUtils.distance(player.getPosition(), p.getPosition()) <= 5);
-        return lowHealth && enemyNear;
-    }
-
-    // Helper: Lấy hướng ném SMOKE để che giữa mình và địch gần nhất (ném ngược hướng địch)
-    private String getSmokeEscapeDirection(Player player, List<Player> others) {
-        Player nearest = others.stream()
-                .min(Comparator.comparingInt(p -> PathUtils.distance(player.getPosition(), p.getPosition())))
-                .orElse(null);
-        if (nearest == null) return "l"; // fallback
-        Node myPos = player.getPosition();
-        Node enemyPos = nearest.getPosition();
-        int dx = myPos.getX() - enemyPos.getX();
-        int dy = myPos.getY() - enemyPos.getY();
-        if (Math.abs(dx) >= Math.abs(dy)) {
-            return dx >= 0 ? "r" : "l";
-        } else {
-            return dy >= 0 ? "u" : "d";
-        }
-    }
 }
