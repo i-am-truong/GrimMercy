@@ -83,7 +83,6 @@ class MapUpdateListener implements Emitter.Listener {
     }
 
     public void handleGame(GameMap gameMap, Player player) throws IOException {
-        restrictNode.clear();
         updateRestrictNode(gameMap, player);
 
 //        tam thoi tranh loi smoke
