@@ -19,22 +19,22 @@ import java.util.*;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-public class Main {
+public class Main4 {
     private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
     private static final String GAME_ID = "189440";
     private static final String PLAYER_NAME = "NeuroSama";
-    private static final String SECRET_KEY = "sk-I66yrGdORXWDWQfpd4qtDA:vVGI_F8vMzFIdjgOH_nnMFp6WkRcYVnXZ9UwiHbPyRqjvTfelockEHJAYgCCZXKax-8jSJCb1HhBGt5ctIUN0A";
+    private static final String SECRET_KEY = "sk-nMDK7wPsQcGfWyBVC8DWKQ:n3xXwaGj_letOWSqnz_NXBlPvqlKsupDdGpUWRi4IKTeXOFwEk7gpBLVNFQg_Tes00X1L0iVtSJLo_4uxYE7rg";
     public static void main(String[] args) throws IOException {
         Hero hero = new Hero(GAME_ID, PLAYER_NAME, SECRET_KEY);
-        Emitter.Listener onMapUpdate = new MapUpdateListener(hero);
+        Emitter.Listener onMapUpdate = new MapUpdateListener4(hero);
         hero.setOnMapUpdate(onMapUpdate);
         hero.start(SERVER_URL);
     }
 
 }
 
-class MapUpdateListener implements Emitter.Listener {
-    public MapUpdateListener(Hero hero) {
+class MapUpdateListener4 implements Emitter.Listener {
+    public MapUpdateListener4(Hero hero) {
         this.hero = hero;
     }
     private static final Logger log = LogManager.getLogger(MapUpdateListener.class);
