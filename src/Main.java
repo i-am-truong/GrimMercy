@@ -22,7 +22,7 @@ import java.util.function.Predicate;
 
 public class Main {
     private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
-    private static final String GAME_ID = "163768";
+    private static final String GAME_ID = "100202";
     private static final String PLAYER_NAME = "NeuroSama";
     private static final String SECRET_KEY = "sk-QF0trYSgT-uH8Ts5r2GjgQ:77yjD6Bql9CmfVeDElVtLKjigvaSViW4KH_UhnbER4zzDECm1Iy7E9CNAdjU8rqcbVP9eNAznl2JyV1UzHSCPA";
     public static void main(String[] args) throws IOException {
@@ -95,8 +95,8 @@ class MapUpdateListener implements Emitter.Listener {
         currentSafeZone =gameMap.getSafeZone();
         if(safeNodeToRunBo == null
                 || !gameMap.getElementByIndex(safeNodeToRunBo.getX(),safeNodeToRunBo.getY()).getId().equalsIgnoreCase("ROAD")
-                || !PathUtils.checkInsideSafeArea(safeNodeToRunBo,gameMap.getSafeZone(),gameMap.getMapSize())
-    || PathUtils.distance(safeNodeToRunBo,player.getPosition()) >5 ){
+                || !PathUtils.checkInsideSafeArea(safeNodeToRunBo,gameMap.getSafeZone()-8,gameMap.getMapSize())
+     ){
             safeNodeToRunBo = findClosestSafeSpot(gameMap,player);
         }
         currentStep++;
@@ -526,9 +526,9 @@ class MapUpdateListener implements Emitter.Listener {
         if (currenWeapon.getId().equalsIgnoreCase("AXE")) return 1;
         if (currenWeapon.getId().equalsIgnoreCase("MACE")) return 3;
 
-        if (currenWeapon.getId().equalsIgnoreCase("SCEPTER")) return 12;
+        if (currenWeapon.getId().equalsIgnoreCase("SCEPTER")) return 10;
         if (currenWeapon.getId().equalsIgnoreCase("CROSSBOW")) return 4;
-        if (currenWeapon.getId().equalsIgnoreCase("RUBBER_GUN")) return 12;
+        if (currenWeapon.getId().equalsIgnoreCase("RUBBER_GUN")) return 10;
         if (currenWeapon.getId().equalsIgnoreCase("SHOTGUN")) return 2;
 
         if (currenWeapon.getId().equalsIgnoreCase("BANANA")) return 6;
@@ -756,11 +756,11 @@ class MapUpdateListener implements Emitter.Listener {
             System.out.println("vao day thi con js lam an nhu lon");
             return "runBo";
         }
-
-        int x = player.getX(), y = player.getY();
-        boolean needRunBo = !PathUtils.checkInsideSafeArea(new Node(x, y), gameMap.getSafeZone()-3, gameMap.getMapSize())
+        boolean needRunBo = !PathUtils.checkInsideSafeArea(player.getPosition(), gameMap.getSafeZone()-8, gameMap.getMapSize())
                 && isShrinking;
+        if (needRunBo) return "runBo";
 
+//        condition fight
         List<Player> others = gameMap.getOtherPlayerInfo().stream()
                 .filter(p -> p.getHealth() > 0).toList();
         List<Weapon> myWeapon = getMyListReadyWeapon();
@@ -776,13 +776,14 @@ class MapUpdateListener implements Emitter.Listener {
 
         List<Weapon> myWeaponCanUse = getMyListReadyCanUseToFight(player,closest,gameMap);
         boolean enemyInRange = closest != null && !myWeaponCanUse.isEmpty();
-
+//     end condition fight
 
         // condition for loot
         boolean needLoot = !hasGun() && gameMap.getAllGun() != null;
         List<Node> listChest =  findNearbyChests(gameMap,player.getX(),player.getY());
         boolean chestExist = !listChest.isEmpty();
-        if(chestExist){
+//        khong can special va melee de danh nhau
+        if(chestExist && (!hasThrowable() || !hasHelmet() || !hasArmor() || !hasSupportItem() || !hasHealingItem())){
             needLoot = true;
         }
             if (!hasThrowable() && gameMap.getAllThrowable() != null) {
@@ -805,36 +806,21 @@ class MapUpdateListener implements Emitter.Listener {
 //        end condition loot
         // Nếu vừa muốn loot vừa có enemy trong tầm
         if (needLoot && enemyInRange) {
-            if (currentNodeTarget == null) {
-                needLoot = false; // Không có gì để loot
-            } else {
                 int distanceWithLoot = PathUtils.distance(player.getPosition(), currentNodeTarget);
                 int distanceWithEnemy = PathUtils.distance(player.getPosition(), closest.getPosition());
 
-                if (distanceWithEnemy <= 3) {
-                    // Địch rất gần → Ưu tiên chiến
+                if (distanceWithEnemy <= 6) {
                     needLoot = false;
                 }
-                else if (distanceWithLoot <= 2 && distanceWithEnemy > 6) {
-                    // Loot gần, enemy không đe dọa → ưu tiên loot
-                    enemyInRange = false;
-                }
-                else if (distanceWithEnemy >= 8 && distanceWithEnemy <= 12) {
-                    // Địch trong tầm bắn xa → ưu tiên chiến
-                    needLoot = false;
-                }
-                else if (distanceWithEnemy > 12 && distanceWithLoot <= 5) {
-                    // Địch rất xa, loot hơi gần → loot
-                    enemyInRange = false;
+                else if (distanceWithLoot < distanceWithEnemy) {
+                    enemyInRange =false;
                 }
                 else {
-                    // Trường hợp mơ hồ → chọn ưu tiên mặc định, ví dụ ưu tiên đánh
                     needLoot = false;
                 }
-            }
         }
 
-        if (needRunBo) return "runBo";
+
         if (enemyInRange) return "fight";
         if (needLoot) return "loot";
         return "hunting";
@@ -906,7 +892,9 @@ class MapUpdateListener implements Emitter.Listener {
             String pathToClosetPlayer = PathUtils.getShortestPath(gameMap,restrictNode,player.getPosition(),closestPlayer,false);
             hero.move(pathToClosetPlayer.substring(0,1));
         }else{
-            handleHide(gameMap,player);
+            String pathToCenter = PathUtils.getShortestPath(gameMap,restrictNode,player.getPosition()
+                    ,PathUtils.getCenterOfMap(gameMap.getMapSize()),false);
+            hero.move(pathToCenter.substring(0,1));
         }
     }
 
