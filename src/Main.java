@@ -5,7 +5,6 @@ import jsclub.codefest.sdk.base.Node;
 import jsclub.codefest.sdk.model.Element;
 import jsclub.codefest.sdk.model.GameMap;
 import jsclub.codefest.sdk.model.Inventory;
-import jsclub.codefest.sdk.model.equipments.Armor;
 import jsclub.codefest.sdk.model.npcs.Enemy;
 import jsclub.codefest.sdk.model.obstacles.Obstacle;
 import jsclub.codefest.sdk.model.obstacles.ObstacleTag;
@@ -167,7 +166,7 @@ class MapUpdateListener implements Emitter.Listener {
             if(escapePath != null){
                 hero.move(escapePath.substring(0,1));
             }else{
-                Node center = PathUtils.getCenterOfMap(gameMap.getMapSize());
+                Node center = new Node(gameMap.getMapSize()/2,gameMap.getMapSize()/2);
                 String pathToCenter = PathUtils.getShortestPath(gameMap,restrictNode,player.getPosition(),center,false);
 
                 hero.move(pathToCenter.substring(0,1));
@@ -892,8 +891,9 @@ class MapUpdateListener implements Emitter.Listener {
             String pathToClosetPlayer = PathUtils.getShortestPath(gameMap,restrictNode,player.getPosition(),closestPlayer,false);
             hero.move(pathToClosetPlayer.substring(0,1));
         }else{
+            Node center = new Node(gameMap.getMapSize()/2,gameMap.getMapSize()/2);
             String pathToCenter = PathUtils.getShortestPath(gameMap,restrictNode,player.getPosition()
-                    ,PathUtils.getCenterOfMap(gameMap.getMapSize()),false);
+                    ,center,false);
             hero.move(pathToCenter.substring(0,1));
         }
     }

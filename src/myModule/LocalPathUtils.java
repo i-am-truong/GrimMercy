@@ -28,10 +28,8 @@ public class LocalPathUtils {
         int mapSize = gameMap.getMapSize();
         int safeZone = gameMap.getSafeZone();
         List<Obstacle> initThings = gameMap.getListIndestructibles();
-
         List<Node> listIndestructibleNodes = new ArrayList(initThings);
         listIndestructibleNodes.addAll(restrictedNodes);
-
         listIndestructibleNodes.removeIf((node) -> node.x == target.x && node.y == target.y);
         ArrayList<ArrayList<Integer>> isRestrictedNodes = new ArrayList(mapSize + 5);
         final ArrayList<ArrayList<Integer>> g = new ArrayList(mapSize + 5);
@@ -68,7 +66,7 @@ public class LocalPathUtils {
         while(!openSet.isEmpty()) {
             Node u = (Node)openSet.poll();
             if (u.x == target.x && u.y == target.y) {
-                int dir=-1;
+                int dir = -1;
                 for(existPath = true; u.x != current.x || u.y != current.y; u.y -= Dy[dir]) {
                     dir = (Integer)((ArrayList)trace.get(u.x)).get(u.y);
                     if (dir == 0) {
@@ -91,7 +89,7 @@ public class LocalPathUtils {
             for(int dir = 0; dir < 4; ++dir) {
                 int x = u.x + Dx[dir];
                 int y = u.y + Dy[dir];
-                if (x >= 0 && y >= 0 && x < mapSize && y < mapSize && (Integer)((ArrayList)isRestrictedNodes.get(x)).get(y) != 1 && (skipDarkArea || checkInsideSafeArea(current, safeZone, gameMap.getMapSize()))) {
+                if (x >= 0 && y >= 0 && x < mapSize && y < mapSize && (Integer)((ArrayList)isRestrictedNodes.get(x)).get(y) != 1 && (skipDarkArea || checkInsideSafeArea(new Node(x, y), safeZone, gameMap.getMapSize()))) {
                     int cost = (Integer)((ArrayList)g.get(u.x)).get(u.y) + 1;
                     if ((Integer)((ArrayList)g.get(x)).get(y) == -1 || (Integer)((ArrayList)g.get(x)).get(y) > cost) {
                         ((ArrayList)g.get(x)).set(y, cost);
