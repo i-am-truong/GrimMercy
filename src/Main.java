@@ -21,7 +21,7 @@ import java.util.function.Predicate;
 
 public class Main {
     private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
-    private static final String GAME_ID = "100202";
+    private static final String GAME_ID = "185730";
     private static final String PLAYER_NAME = "NeuroSama";
     private static final String SECRET_KEY = "sk-QF0trYSgT-uH8Ts5r2GjgQ:77yjD6Bql9CmfVeDElVtLKjigvaSViW4KH_UhnbER4zzDECm1Iy7E9CNAdjU8rqcbVP9eNAznl2JyV1UzHSCPA";
     public static void main(String[] args) throws IOException {
@@ -99,7 +99,7 @@ class MapUpdateListener implements Emitter.Listener {
             safeNodeToRunBo = findClosestSafeSpot(gameMap,player);
         }
         currentStep++;
-        updateRestrictNode(gameMap);
+        updateRestrictNode(gameMap, player);
 
         updateCooldowns();
         String currentDecision  = getDecisionForNextStep(gameMap, player);
@@ -126,6 +126,7 @@ class MapUpdateListener implements Emitter.Listener {
         System.out.println("right element: " + gameMap.getElementByIndex(player.getX()+1,player.getY()).getId());
         System.out.println("left element: " + gameMap.getElementByIndex(player.getX()-1,player.getY()).getId());
         System.out.println("Current Node loot Target : "+ currentNodeTarget);
+        System.out.println("Current element want to loot  : "+ gameMap.getElementByIndex(currentNodeTarget.getX(),currentNodeTarget.getY()));
     }
 
     public void handleDie(){
@@ -281,9 +282,9 @@ class MapUpdateListener implements Emitter.Listener {
         ).toList();
 
         // --- NPC DODGE LOGIC: Nếu bị NPC nguy hiểm áp sát thì né tránh ---
-        if (dodgeIfDangerousNpcNearby(gameMap, player)) {
-            return;
-        }
+//        if (dodgeIfDangerousNpcNearby(gameMap, player)) {
+//            return;
+//        }
 
         // Nếu không có ai trong tầm thì bỏ qua
         if (playersInRange.isEmpty()) {
@@ -595,7 +596,7 @@ class MapUpdateListener implements Emitter.Listener {
         specialCooldownTick = 0;
     }
 
-    private void updateRestrictNode(GameMap gameMap) {
+    private void updateRestrictNode(GameMap gameMap, Player player) throws IOException {
         //Tránh phình bộ nhớ hoặc trùng lặp node.
         restrictNode.clear();
         List<Node> nodes = new ArrayList<>(gameMap.getListIndestructibles());
@@ -614,7 +615,7 @@ class MapUpdateListener implements Emitter.Listener {
         restrictNode.addAll(nodes);
         restrictNode.addAll(gameMap.getListChests());
         restrictNode.removeAll(gameMap.getListChests().stream().filter(o->o.getHp()<=0).toList());
-        addEnemyToRestrict(gameMap);
+        addEnemyToRestrict(gameMap, player);
 
         // Loại trùng lặp node sau cùng
         removeDuplicateNodes();
@@ -632,7 +633,7 @@ class MapUpdateListener implements Emitter.Listener {
         }
     }
 
-    public void addEnemyToRestrict(GameMap gameMap){
+    public void addEnemyToRestrict(GameMap gameMap, Player player) throws IOException {
         //_Cho enemy vao retriced__________________________
         List<Enemy> listEnemies = gameMap.getListEnemies();
         if (listNodeEnemySave.isEmpty())
@@ -744,6 +745,49 @@ class MapUpdateListener implements Emitter.Listener {
                     listNodeEnemySave.add(i, listEnemies.get(i));
                 }
             }
+        }
+        carveSafeZoneAndEscape(gameMap, player);
+    }
+    private void carveSafeZoneAndEscape(GameMap gameMap, Player player) throws IOException {
+        Node p = player.getPosition();
+        int size = gameMap.getMapSize();
+
+        // 1) Kiểm tra xem 4 ô l/r/u/d xung quanh có bị chặn hết không
+        boolean allBlocked = true;
+        List<String> directions = List.of("l","r","u","d");
+        for (String dir : directions) {
+            Node n = moveNode(p, dir);
+            if (n.getX() >= 0 && n.getX() < size
+                    && n.getY() >= 0 && n.getY() < size
+                    && !restrictNode.contains(n)) {
+                allBlocked = false;
+                break;
+            }
+        }
+
+        if (allBlocked) {
+            // 2) Carve vùng 3x3 quanh player (loại bỏ khỏi restrictNode)
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    int nx = p.getX() + dx, ny = p.getY() + dy;
+                    if (nx >= 0 && nx < size && ny >= 0 && ny < size) {
+                        restrictNode.remove(new Node(nx, ny));
+                    }
+                }
+            }
+
+            // 3) Di chuyển hero ngay một bước đầu tiên ra khỏi vị trí hiện tại
+            for (String dir : directions) {
+                Node next = moveNode(p, dir);
+                if (next.getX() >= 0 && next.getX() < size
+                        && next.getY() >= 0 && next.getY() < size
+                        && !restrictNode.contains(next)) {
+                    hero.move(dir);
+                    return;
+                }
+            }
+            // 4) Nếu vẫn không tìm được (góc bản đồ), fallback:
+            dodgeOrRetreat(player, gameMap, p);
         }
     }
 
@@ -879,9 +923,9 @@ class MapUpdateListener implements Emitter.Listener {
     }
 
     private void handleHunting(GameMap gameMap, Player player) throws IOException {
-        if (dodgeIfDangerousNpcNearby(gameMap, player)) {
-            return;
-        }
+//        if (dodgeIfDangerousNpcNearby(gameMap, player)) {
+//            return;
+//        }
         Player closestPlayer = gameMap.getOtherPlayerInfo().stream()
                 .filter(p -> p.getHealth() > 0)
                 .min(Comparator.comparingInt(p -> PathUtils.distance(player.getPosition(), p.getPosition())))
@@ -900,9 +944,9 @@ class MapUpdateListener implements Emitter.Listener {
 
     public void handleLoot(GameMap gameMap, Player player) throws IOException {
         // --- NPC DODGE LOGIC: Nếu bị NPC nguy hiểm áp sát thì né tránh ---
-        if (dodgeIfDangerousNpcNearby(gameMap, player)) {
-            return;
-        }
+//        if (dodgeIfDangerousNpcNearby(gameMap, player)) {
+//            return;
+//        }
 
         boolean canHeal = hasHealingItem()
                 && player.getHealth() < 100 * 0.9;
