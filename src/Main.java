@@ -22,10 +22,9 @@ import java.util.function.Predicate;
 
 public class Main {
     private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
-    private static final String GAME_ID = "101102";
+    private static final String GAME_ID = "163768";
     private static final String PLAYER_NAME = "NeuroSama";
-    private static final String SECRET_KEY = "sk-I66yrGdORXWDWQfpd4qtDA:vVGI_F8vMzFIdjgOH_nnMFp6WkRcYVnXZ9UwiHbPyRqjvTfelockEHJAYgCCZXKax-8jSJCb1HhBGt5ctIUN0A";
-
+    private static final String SECRET_KEY = "sk-QF0trYSgT-uH8Ts5r2GjgQ:77yjD6Bql9CmfVeDElVtLKjigvaSViW4KH_UhnbER4zzDECm1Iy7E9CNAdjU8rqcbVP9eNAznl2JyV1UzHSCPA";
     public static void main(String[] args) throws IOException {
         Hero hero = new Hero(GAME_ID, PLAYER_NAME, SECRET_KEY);
         Emitter.Listener onMapUpdate = new MapUpdateListener(hero);
@@ -283,6 +282,11 @@ class MapUpdateListener implements Emitter.Listener {
         List<Player> playersInRange = otherPlayer.stream().filter(p ->
                 PathUtils.distance(player.getPosition(),p) <= maxRange
         ).toList();
+
+        // --- NPC DODGE LOGIC: Nếu bị NPC nguy hiểm áp sát thì né tránh ---
+        if (dodgeIfDangerousNpcNearby(gameMap, player)) {
+            return;
+        }
 
         // Nếu không có ai trong tầm thì bỏ qua
         if (playersInRange.isEmpty()) {
@@ -892,6 +896,9 @@ class MapUpdateListener implements Emitter.Listener {
     }
 
     private void handleHunting(GameMap gameMap, Player player) throws IOException {
+        if (dodgeIfDangerousNpcNearby(gameMap, player)) {
+            return;
+        }
         Player closestPlayer = gameMap.getOtherPlayerInfo().stream()
                 .filter(p -> p.getHealth() > 0)
                 .min(Comparator.comparingInt(p -> PathUtils.distance(player.getPosition(), p.getPosition())))
@@ -906,6 +913,10 @@ class MapUpdateListener implements Emitter.Listener {
     }
 
     public void handleLoot(GameMap gameMap, Player player) throws IOException {
+        // --- NPC DODGE LOGIC: Nếu bị NPC nguy hiểm áp sát thì né tránh ---
+        if (dodgeIfDangerousNpcNearby(gameMap, player)) {
+            return;
+        }
 
         boolean canHeal = hasHealingItem()
                 && player.getHealth() < 100 * 0.9;
@@ -933,7 +944,13 @@ class MapUpdateListener implements Emitter.Listener {
                 gameMap.getOtherPlayerInfo()
         );
         System.out.println("current loot Path: " + path);
-        executePathOrLoot(
+        // Nếu không tìm được path hoặc path rỗng, chuyển sang hide để tránh đứng yên/lặp lại
+        if (path == null || path.isEmpty()) {
+            System.out.println("Loot path invalid, fallback to hide to avoid stuck.");
+            handleHide(gameMap, player);
+            return;
+        }
+      executePathOrLoot(
                 gameMap,
                 currentNode,
                 path
@@ -1186,4 +1203,43 @@ class MapUpdateListener implements Emitter.Listener {
         }
     }
 
+    // Helper: trả về node mới sau khi di chuyển 1 bước theo hướng dir
+    private Node moveNode(Node pos, String dir, int mapSize) {
+        int x = pos.getX(), y = pos.getY();
+        switch (dir) {
+            case "l": return new Node(x - 1, y);
+            case "r": return new Node(x + 1, y);
+            case "u": return new Node(x, y + 1);
+            case "d": return new Node(x, y - 1);
+            default: return pos;
+        }
+    }
+
+    // --- Add this helper method ---
+    /**
+     * If a dangerous NPC is adjacent (<=3 cells), dodge and return true.
+     * Otherwise, return false.
+     */
+    private boolean dodgeIfDangerousNpcNearby(GameMap gameMap, Player player) throws IOException {
+        List<String> dangerNpcIds = Arrays.asList("NATIVE", "GHOST", "LEOPARD", "ANACONDA", "RHINO", "GOLEM");
+        boolean npcAdjacent = gameMap.getListEnemies().stream().anyMatch(
+                npc -> dangerNpcIds.contains(npc.getId())
+                        && PathUtils.distance(player.getPosition(), new Node(npc.getX(), npc.getY())) <= 2
+        );
+        if (npcAdjacent) {
+            for (String dir : Arrays.asList("l", "r", "u", "d")) {
+                Node next = moveNode(player.getPosition(), dir, gameMap.getMapSize());
+                if (next.getX() >= 0 && next.getX() < gameMap.getMapSize()
+                        && next.getY() >= 0 && next.getY() < gameMap.getMapSize()
+                        && !restrictNode.contains(next)) {
+                    hero.move(dir);
+                    return true;
+                }
+            }
+            // fallback: try to retreat if no direction is available
+            dodgeOrRetreat(player, gameMap, player.getPosition());
+            return true;
+        }
+        return false;
+    }
 }
