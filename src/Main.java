@@ -81,8 +81,6 @@ class MapUpdateListener implements Emitter.Listener {
     }
 
     public void handleGame(GameMap gameMap, Player player) throws IOException {
-        updateRestrictNode(gameMap, player);
-
 //        tam thoi tranh loi smoke
         if(hasThrowable()){
             Weapon currentThrow = hero.getInventory().getThrowable();
@@ -101,9 +99,9 @@ class MapUpdateListener implements Emitter.Listener {
     || PathUtils.distance(safeNodeToRunBo,player.getPosition()) >5 ){
             safeNodeToRunBo = findClosestSafeSpot(gameMap,player);
         }
-        updateRestrictNode(gameMap,player);
-
         currentStep++;
+        updateRestrictNode(gameMap);
+
         updateCooldowns();
         String currentDecision  = getDecisionForNextStep(gameMap, player);
         switch (currentDecision ) {
@@ -263,7 +261,7 @@ class MapUpdateListener implements Emitter.Listener {
 
         // --- SUPPORT ITEM LOGIC ---
         // Nếu máu thấp và có support item (healing/special) thì dùng trước khi đánh
-        if (hasHealingItem() && player.getHealth() < 100 * 0.7) {
+        if ((hasHealingItem() || hasSupportItem()) && player.getHealth() < 100 * 0.7) {
             // Ưu tiên dùng ELIXIR_OF_LIFE, ELIXIR, MAGIC, COMPASS nếu có
             List<String> supportPriority = Arrays.asList(
                     "ELIXIR_OF_LIFE", "ELIXIR", "MAGIC", "COMPASS",
@@ -598,7 +596,7 @@ class MapUpdateListener implements Emitter.Listener {
         specialCooldownTick = 0;
     }
 
-    private void updateRestrictNode(GameMap gameMap, Player player) {
+    private void updateRestrictNode(GameMap gameMap) {
         //Tránh phình bộ nhớ hoặc trùng lặp node.
         restrictNode.clear();
         List<Node> nodes = new ArrayList<>(gameMap.getListIndestructibles());
@@ -905,7 +903,7 @@ class MapUpdateListener implements Emitter.Listener {
                 .orElse(null);
         if(closestPlayer != null){
             restrictNode.remove(closestPlayer);
-            String pathToClosetPlayer = LocalPathUtils.getShortestPath(gameMap,restrictNode,player.getPosition(),closestPlayer,false);
+            String pathToClosetPlayer = PathUtils.getShortestPath(gameMap,restrictNode,player.getPosition(),closestPlayer,false);
             hero.move(pathToClosetPlayer.substring(0,1));
         }else{
             handleHide(gameMap,player);
@@ -1204,15 +1202,15 @@ class MapUpdateListener implements Emitter.Listener {
     }
 
     // Helper: trả về node mới sau khi di chuyển 1 bước theo hướng dir
-    private Node moveNode(Node pos, String dir, int mapSize) {
+    private Node moveNode(Node pos, String dir) {
         int x = pos.getX(), y = pos.getY();
-        switch (dir) {
-            case "l": return new Node(x - 1, y);
-            case "r": return new Node(x + 1, y);
-            case "u": return new Node(x, y + 1);
-            case "d": return new Node(x, y - 1);
-            default: return pos;
-        }
+        return switch (dir) {
+            case "l" -> new Node(x - 1, y);
+            case "r" -> new Node(x + 1, y);
+            case "u" -> new Node(x, y + 1);
+            case "d" -> new Node(x, y - 1);
+            default -> pos;
+        };
     }
 
     // --- Add this helper method ---
@@ -1228,7 +1226,7 @@ class MapUpdateListener implements Emitter.Listener {
         );
         if (npcAdjacent) {
             for (String dir : Arrays.asList("l", "r", "u", "d")) {
-                Node next = moveNode(player.getPosition(), dir, gameMap.getMapSize());
+                Node next = moveNode(player.getPosition(), dir);
                 if (next.getX() >= 0 && next.getX() < gameMap.getMapSize()
                         && next.getY() >= 0 && next.getY() < gameMap.getMapSize()
                         && !restrictNode.contains(next)) {
