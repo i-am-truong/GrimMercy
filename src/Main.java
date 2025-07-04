@@ -25,7 +25,7 @@ import java.util.function.Predicate;
 
 public class Main {
     private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
-    private static final String GAME_ID = "105861";
+    private static final String GAME_ID = "140241";
     private static final String PLAYER_NAME = "NeuroSama";
     private static final String SECRET_KEY = "sk-I66yrGdORXWDWQfpd4qtDA:vVGI_F8vMzFIdjgOH_nnMFp6WkRcYVnXZ9UwiHbPyRqjvTfelockEHJAYgCCZXKax-8jSJCb1HhBGt5ctIUN0A";
     public static void main(String[] args) throws IOException {
@@ -177,7 +177,7 @@ class MapUpdateListener implements Emitter.Listener {
         for (Player p : gameMap.getOtherPlayerInfo()) {
             restrictNode.add(new Node(p.getX(), p.getY()));
         }
-        String pathToHide = LocalPathUtils.getShortestPath(gameMap,restrictNode, player.getPosition(), safestSpot,false);
+        String pathToHide = PathUtils.getShortestPath(gameMap,restrictNode, player.getPosition(), safestSpot,false);
         if(pathToHide != null){
             hero.move(pathToHide.substring(0,1));
         }else{
@@ -219,7 +219,7 @@ class MapUpdateListener implements Emitter.Listener {
                                 // Kiểm tra trong map
                                 if (x >= 0 && x < gameMap.getMapSize() && y >= 0 && y < gameMap.getMapSize()) {
                                     Node candidate = new Node(x, y);
-                                    String pathToCenter = LocalPathUtils.getShortestPath(gameMap, restrictNode, player.getPosition(), candidate, false);
+                                    String pathToCenter = PathUtils.getShortestPath(gameMap, restrictNode, player.getPosition(), candidate, false);
 
                                     if (pathToCenter != null && !pathToCenter.isEmpty()) {
                                         hero.move(pathToCenter.substring(0, 1));
@@ -249,7 +249,7 @@ class MapUpdateListener implements Emitter.Listener {
             int tx, int ty
     ) {
         Node corner = new Node(tx, ty);
-        return LocalPathUtils.getShortestPath(map, restricted, current, corner, true);
+        return PathUtils.getShortestPath(map, restricted, current, corner, true);
     }
 
     private Node findSafeSpotAwayFromEnemies(GameMap gameMap) {
@@ -365,7 +365,6 @@ class MapUpdateListener implements Emitter.Listener {
         Weapon currenWeapon = myWeaponCanUse.stream()
                 .filter(w -> !w.getId().equalsIgnoreCase("SMOKE")) // Không dùng SMOKE để tấn công!
                 .max(Comparator.comparingInt(Weapon::getDamage)).orElse(null);
-
 
         if(currenWeapon !=null){
             boolean canAttack = canAttack(player.getPosition(),target.getPosition(),maxRange);
@@ -514,7 +513,10 @@ class MapUpdateListener implements Emitter.Listener {
         int minLength = Integer.MAX_VALUE;
 
         for (Node target : candidatePositions) {
-            String path = LocalPathUtils.getShortestPath(gameMap, restrictNode, current, target, false);
+            if(restrictNode.contains(target)){
+                continue;
+            }
+            String path = PathUtils.getShortestPath(gameMap, restrictNode, current, target, false);
             if (path != null && path.length() < minLength) {
                 bestPath = path;
                 minLength = path.length();
@@ -594,21 +596,21 @@ class MapUpdateListener implements Emitter.Listener {
         if (currenWeapon.getId().equalsIgnoreCase("TREE_BRANCH")) return 1;
         if (currenWeapon.getId().equalsIgnoreCase("BONE")) return 1;
         if (currenWeapon.getId().equalsIgnoreCase("AXE")) return 1;
-        if (currenWeapon.getId().equalsIgnoreCase("MACE")) return 3;
+        if (currenWeapon.getId().equalsIgnoreCase("MACE")) return 1;
 
-        if (currenWeapon.getId().equalsIgnoreCase("SCEPTER")) return 10;
-        if (currenWeapon.getId().equalsIgnoreCase("CROSSBOW")) return 8;
-        if (currenWeapon.getId().equalsIgnoreCase("RUBBER_GUN")) return 6;
+        if (currenWeapon.getId().equalsIgnoreCase("SCEPTER")) return 1;
+        if (currenWeapon.getId().equalsIgnoreCase("CROSSBOW")) return 1;
+        if (currenWeapon.getId().equalsIgnoreCase("RUBBER_GUN")) return 1;
         if (currenWeapon.getId().equalsIgnoreCase("SHOTGUN")) return 1;
 
-        if (currenWeapon.getId().equalsIgnoreCase("BANANA")) return 6;
-        if (currenWeapon.getId().equalsIgnoreCase("METEORITE_FRAGMENT")) return 6;
-        if (currenWeapon.getId().equalsIgnoreCase("CRYSTAL")) return 6;
-        if (currenWeapon.getId().equalsIgnoreCase("SEED")) return 5;
+        if (currenWeapon.getId().equalsIgnoreCase("BANANA")) return 1;
+        if (currenWeapon.getId().equalsIgnoreCase("METEORITE_FRAGMENT")) return 1;
+        if (currenWeapon.getId().equalsIgnoreCase("CRYSTAL")) return 1;
+        if (currenWeapon.getId().equalsIgnoreCase("SEED")) return 1;
 
-        if (currenWeapon.getId().equalsIgnoreCase("ROPE")) return 6;
+        if (currenWeapon.getId().equalsIgnoreCase("ROPE")) return 1;
         if (currenWeapon.getId().equalsIgnoreCase("BELL")) return 1;
-        if (currenWeapon.getId().equalsIgnoreCase("SAHUR_BAT")) return 5;
+        if (currenWeapon.getId().equalsIgnoreCase("SAHUR_BAT")) return 1;
         return 1;
     }
     private List<Weapon> getMyListReadyWeapon(){
@@ -629,14 +631,14 @@ class MapUpdateListener implements Emitter.Listener {
             Weapon hand = WeaponFactory.getWeaponById("HAND");
             result.add(hand);
         }
-        Weapon throwable = inv.getThrowable();
-        if (hasThrowable() && canUseThrow() && throwable != null) {
-            result.add(throwable);
-        }
-        Weapon special = inv.getSpecial();
-        if (hasSpecial() && canUseSpecial() && special != null) {
-            result.add(special);
-        }
+//        Weapon throwable = inv.getThrowable();
+//        if (hasThrowable() && canUseThrow() && throwable != null) {
+//            result.add(throwable);
+//        }
+//        Weapon special = inv.getSpecial();
+//        if (hasSpecial() && canUseSpecial() && special != null) {
+//            result.add(special);
+//        }
         return result;
     }
 
@@ -882,9 +884,13 @@ class MapUpdateListener implements Emitter.Listener {
         List<Node> listChest =  findNearbyChests(gameMap,player.getX(),player.getY());
         boolean chestExist = !listChest.isEmpty();
 //        khong can special va melee de danh nhau va 1 giap la du roi
-        boolean needDesChest = chestExist && (!hasThrowable() || (!hasHelmet() && !hasArmor()) || hero.getInventory().getListSupportItem().size() < 3);
-        System.out.println("Chest exist is : " + chestExist);
 
+        boolean needDesChest = chestExist && (!hasMelee() || (!hasHelmet() && !hasArmor()) || hero.getInventory().getListSupportItem().size() < 2);
+        System.out.println("Chest exist is : " + chestExist);
+//        round 1 test
+        if(hasMelee() && hasGun()){
+            needDesChest = false;
+        }
         boolean hasThrowableInSafeArea = gameMap.getAllThrowable().stream()
                 .anyMatch(w -> PathUtils.checkInsideSafeArea(
                         w.getPosition(),
@@ -1004,7 +1010,7 @@ class MapUpdateListener implements Emitter.Listener {
             }
 
         }
-        String pathRun = LocalPathUtils.getShortestPath(gameMap,restrictNode,player.getPosition(),safeNodeToRunBo,true);
+        String pathRun = PathUtils.getShortestPath(gameMap,restrictNode,player.getPosition(),safeNodeToRunBo,true);
         if(pathRun == null){
             handleHide(gameMap,player);
         }else{
@@ -1081,7 +1087,7 @@ class MapUpdateListener implements Emitter.Listener {
                             // Kiểm tra trong map
                             if (x >= 0 && x < gameMap.getMapSize() && y >= 0 && y < gameMap.getMapSize()) {
                                 Node candidate = new Node(x, y);
-                                String pathToCenter = LocalPathUtils.getShortestPath(gameMap, restrictNode, player.getPosition(), candidate, false);
+                                String pathToCenter = PathUtils.getShortestPath(gameMap, restrictNode, player.getPosition(), candidate, false);
 
                                 if (pathToCenter != null && !pathToCenter.isEmpty()) {
                                     hero.move(pathToCenter.substring(0, 1));
@@ -1130,13 +1136,9 @@ class MapUpdateListener implements Emitter.Listener {
         System.out.println("current loot Path: " + path);
 
         if (path != null && !path.isEmpty()) {
-            if (path.length() > 5) {
-                handleChestDestruction(gameMap, player);
-                return;
-            }
-            hero.move(path.substring(0, 1));
+             hero.move(path.substring(0, 1));
         } else {
-            carveSafeZoneAndEscape(gameMap, player);
+           handleHide(gameMap,player);
         }
 
     }
@@ -1272,6 +1274,8 @@ class MapUpdateListener implements Emitter.Listener {
 
         if (path != null && !path.isEmpty()) {
             hero.move(path.substring(0, 1));
+        }else{
+            handleHide(map,player);
         }
     }
 
@@ -1287,11 +1291,17 @@ class MapUpdateListener implements Emitter.Listener {
                 if (!PathUtils.checkInsideSafeArea(pos, map.getSafeZone(), size)) continue;
                 if (Math.abs(c.getX() - x) <= 10*r && Math.abs(c.getY() - y) <= 10*r) {
                     int cx = c.getX(), cy = c.getY();
-                    if (cx == x) {
-                        result.add(new Node(cx, cy > y ? cy-1 : cy+1));
-                    } else {
-                        result.add(new Node(cx + (cx < x ? 1 : -1), cy));
+                    if (cx == x && !restrictNode.contains(new Node(cx,cy+1)) ) {
+                        result.add(new Node(cx,cy+1));
+                    }if (cx == x && !restrictNode.contains(new Node(cx,cy-1)) ) {
+                        result.add(new Node(cx,cy-1));
+                    }if (cy == y && !restrictNode.contains(new Node(cx+1,cy)) ) {
+                        result.add(new Node(cx+1,cy));
+                    }if (cy == y && !restrictNode.contains(new Node(cx-1,cy)) ) {
+                        result.add(new Node(cx-1,cy));
                     }
+
+
                 }
             }
             if (!result.isEmpty()) break;
@@ -1324,7 +1334,7 @@ class MapUpdateListener implements Emitter.Listener {
         int minLength = Integer.MAX_VALUE;
 
         for (Node target : targets) {
-            String path = LocalPathUtils.getShortestPath(map, restrictNode, current, target, false);
+            String path = PathUtils.getShortestPath(map, restrictNode, current, target, false);
             if (path != null && !path.isEmpty() && path.length() < minLength) {
                 bestPath = path;
                 minLength = path.length();
@@ -1342,7 +1352,7 @@ class MapUpdateListener implements Emitter.Listener {
         int minLength = Integer.MAX_VALUE;
 
         for (Node target : targets) {
-            String path = LocalPathUtils.getShortestPath(map, restrictNode, current, target, false);
+            String path = PathUtils.getShortestPath(map, restrictNode, current, target, false);
             if (path != null && !path.isEmpty() && path.length() < minLength) {
                 bestPath = path;
                 minLength = path.length();
