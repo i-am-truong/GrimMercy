@@ -21,7 +21,7 @@ import java.util.function.Predicate;
 
 public class Main {
     private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
-    private static final String GAME_ID = "189440";
+    private static final String GAME_ID = "150953";
     private static final String PLAYER_NAME = "NeuroSama";
     private static final String SECRET_KEY = "sk-I66yrGdORXWDWQfpd4qtDA:vVGI_F8vMzFIdjgOH_nnMFp6WkRcYVnXZ9UwiHbPyRqjvTfelockEHJAYgCCZXKax-8jSJCb1HhBGt5ctIUN0A";
     public static void main(String[] args) throws IOException {
@@ -120,7 +120,7 @@ class MapUpdateListener implements Emitter.Listener {
         System.out.println("code fest inventory melee: " + hero.getInventory().getMelee());
         System.out.println("code fest inventory throw: " + hero.getInventory().getThrowable());
         System.out.println("code fest inventory special: " + hero.getInventory().getSpecial());
-        System.out.println("code fest inventory heal: " + hero.getInventory().getListHealingItem());
+        System.out.println("code fest inventory supportItem: " + hero.getInventory().getListSupportItem());
         System.out.println("top element: " + gameMap.getElementByIndex(player.getX(),player.getY()+1).getId());
         System.out.println("bot element: " + gameMap.getElementByIndex(player.getX(),player.getY()-1).getId());
         System.out.println("right element: " + gameMap.getElementByIndex(player.getX()+1,player.getY()).getId());
@@ -209,10 +209,13 @@ class MapUpdateListener implements Emitter.Listener {
                 // Tính khoảng cách tới enemy gần nhất
                 int minDistToEnemy = Integer.MAX_VALUE;
                 for (Enemy enemy : enemies) {
-                    int dist = PathUtils.distance(node, new Node(enemy.getX(), enemy.getY()));
-                    if (dist < minDistToEnemy) {
-                        minDistToEnemy = dist;
+                    if(enemy != null){
+                        int dist = PathUtils.distance(node, enemy.getPosition());
+                        if (dist < minDistToEnemy) {
+                            minDistToEnemy = dist;
+                        }
                     }
+
                 }
 
                 // Chọn node có khoảng cách xa nhất với enemy
@@ -244,12 +247,12 @@ class MapUpdateListener implements Emitter.Listener {
             && !"HAND".equalsIgnoreCase(hero.getInventory().getMelee().getId()); }
     public boolean hasSpecial(){return hero.getInventory().getSpecial()!= null;}
     public boolean hasHealingItem(){
-        return hero.getInventory().getListHealingItem().stream()
+        return hero.getInventory().getListSupportItem().stream()
                 .anyMatch(item -> healingSet.contains(item.getId()));
     }
 
     public boolean hasSupportItem() {
-        return hero.getInventory().getListHealingItem().stream()
+        return hero.getInventory().getListSupportItem().stream()
                 .anyMatch(item -> specialSet.contains(item.getId()));
     }
 
@@ -267,7 +270,7 @@ class MapUpdateListener implements Emitter.Listener {
                     "ELIXIR_OF_LIFE", "ELIXIR", "MAGIC", "COMPASS",
                     "GOD_LEAF", "SPIRIT_TEAR", "MERMAID_TAIL", "PHOENIX_FEATHERS", "UNICORN_BLOOD"
             );
-            for (Element e : hero.getInventory().getListHealingItem()) {
+            for (Element e : hero.getInventory().getListSupportItem()) {
                 if (supportPriority.contains(e.getId())) {
                     hero.useItem(e.getId());
                     return;
@@ -295,7 +298,8 @@ class MapUpdateListener implements Emitter.Listener {
         Player target = playersInRange.stream().min(Comparator.comparingDouble(Player::getHealth)).orElse(null);
 
         restrictNode.remove(target);
-        restrictNode.addAll(gameMap.getListChests().stream().filter(o->o.getHp()>0).toList());
+
+        restrictNode.addAll(gameMap.getObstaclesByTag("DESTRUCTIBLE").stream().filter(o->o.getHp()>0).toList());
         int distanceWithTarget = PathUtils.distance(player.getPosition(),target.getPosition());
         List<Weapon> myWeaponCanUse = getMyListReadyCanUseToFight(player,target,gameMap)
                 .stream().filter(w-> getRangeWeaponAHead(w) >= distanceWithTarget).toList();
@@ -338,7 +342,7 @@ class MapUpdateListener implements Emitter.Listener {
                         || currenWeapon.getId().equalsIgnoreCase("METEORITE_FRAGMENT")
                         || currenWeapon.getId().equalsIgnoreCase("CRYSTAL")
                         || currenWeapon.getId().equalsIgnoreCase("SEED")){
-                    hero.throwItem(dir,getRangeWeaponAHead(currenWeapon));
+                    hero.throwItem(dir);
                     throwCooldownTick = (int)Math.ceil(currenWeapon.getCooldown());
                 }
 
@@ -481,7 +485,7 @@ class MapUpdateListener implements Emitter.Listener {
         // Lấy tất cả obstacle không thể bắn xuyên qua
         List<Obstacle> allObstacles = gameMap.getListObstacles();
         List<Obstacle> blockBullets = allObstacles.stream()
-                .filter(ob -> !ob.getTag().contains(ObstacleTag.CAN_SHOOT_THROUGH))
+                .filter(ob -> !ob.getTags().contains(ObstacleTag.CAN_SHOOT_THROUGH))
                 .toList();
 
         // Kiểm tra có obstacle nằm giữa không
@@ -613,12 +617,12 @@ class MapUpdateListener implements Emitter.Listener {
         }
         nodes.addAll(gameMap.getOtherPlayerInfo());
         restrictNode.addAll(nodes);
-        restrictNode.addAll(gameMap.getListChests());
-        restrictNode.removeAll(gameMap.getListChests().stream().filter(o->o.getHp()<=0).toList());
+        restrictNode.addAll(gameMap.getObstaclesByTag("DESTRUCTIBLE"));
+        restrictNode.removeAll(gameMap.getObstaclesByTag("DESTRUCTIBLE").stream().filter(o->o.getHp()<=0).toList());
         addEnemyToRestrict(gameMap, player);
 
         // Loại trùng lặp node sau cùng
-        removeDuplicateNodes();
+//        removeDuplicateNodes();
     }
 
     private void removeDuplicateNodes() {
@@ -833,7 +837,7 @@ class MapUpdateListener implements Emitter.Listener {
             if (!hasThrowable() && gameMap.getAllThrowable() != null) {
                 needLoot = true;
             }
-            if (!hasHealingItem() && gameMap.getListHealingItems() != null) {
+            if (!hasHealingItem() && gameMap.getListSupportItems() != null) {
                 needLoot = true;
             }
             if (!hasMelee() && gameMap.getAllMelee() !=null) {
@@ -955,7 +959,7 @@ class MapUpdateListener implements Emitter.Listener {
             List<String> supportPriority = Arrays.asList(
                     "ELIXIR_OF_LIFE", "GOD_LEAF", "SPIRIT_TEAR", "MERMAID_TAIL", "PHOENIX_FEATHERS", "UNICORN_BLOOD"
             );
-            for (Element e : hero.getInventory().getListHealingItem()) {
+            for (Element e : hero.getInventory().getListSupportItem()) {
                 if (supportPriority.contains(e.getId())) {
                     hero.useItem(e.getId());
                     return;
@@ -989,24 +993,6 @@ class MapUpdateListener implements Emitter.Listener {
     }
 
 
-    private boolean checkLootHealingItem(Element nextLootItem) {
-        int healingCount = 0, specialCount = 0;
-
-        for (Element e : hero.getInventory().getListHealingItem()) {
-            String id = e.getId();
-            if (healingSet.contains(id)) healingCount++;
-            else if (specialSet.contains(id)) specialCount++;
-        }
-
-        int totalCount = healingCount + specialCount;
-        String nextId = nextLootItem.getId();
-
-        if (totalCount >= 4) return false;
-        if (healingSet.contains(nextId)) return healingCount < 2;
-        if (specialSet.contains(nextId)) return specialCount < 2;
-        return false;
-    }
-
     public List<Node> collectLootTargets(
             GameMap map,
             Node current
@@ -1019,13 +1005,12 @@ class MapUpdateListener implements Emitter.Listener {
         }
 
 
-        if (hero.getInventory().getListHealingItem().size() < 4) {
+        if (hero.getInventory().getListSupportItem().size() < 4) {
             addTargetsFromList(
-                    map.getListHealingItems(),
+                    map.getListSupportItems(),
                     item -> new Node(item.getX(), item.getY()),
                     map,
-                    targets,
-                    this::checkLootHealingItem
+                    targets
             );
         }
 
@@ -1066,7 +1051,7 @@ class MapUpdateListener implements Emitter.Listener {
         }
 
 
-        if (!hasGun() || !hasMelee() || !hasThrowable() || !hasHelmet() || !hasArmor() || hero.getInventory().getListHealingItem().size() <4) {
+        if (!hasGun() || !hasMelee() || !hasThrowable() || !hasHelmet() || !hasArmor() || hero.getInventory().getListSupportItem().size() <4) {
             targets.addAll(findNearbyChests(map, x, y));
         }
 
@@ -1117,7 +1102,7 @@ class MapUpdateListener implements Emitter.Listener {
 
     private List<Node> findNearbyChests(GameMap map, int x, int y) {
         List<Node> result = new ArrayList<>();
-        List<Obstacle> chests = map.getListChests();
+        List<Obstacle> chests = map.getObstaclesByTag("DESTRUCTIBLE");
         int size = map.getMapSize();
         for (int r = 1; r < size; r++) {
             for (Obstacle c : chests) {
@@ -1190,7 +1175,9 @@ class MapUpdateListener implements Emitter.Listener {
             Node current,
             String path
     ) throws IOException {
+
         int x = current.x, y = current.y;
+        attackAdjacentChestsNoId(hero, map, x, y);
         if (currentNodeTarget!= null && PathUtils.distance(current, currentNodeTarget) == 0) {
             Element elem = map.getElementByIndex(x, y);
 
@@ -1211,11 +1198,11 @@ class MapUpdateListener implements Emitter.Listener {
             String step = path.substring(0, 1);
             hero.move(step);
         }
-        attackAdjacentChestsNoId(hero, map, x, y);
+
     }
     void attackAdjacentChestsNoId(Hero hero, GameMap gameMap, int px, int py) {
         try {
-            for (Obstacle chest : gameMap.getListChests()) {
+            for (Obstacle chest : gameMap.getObstaclesByTag("DESTRUCTIBLE")) {
                 if (chest.getHp() <= 0) continue;
                 int dx = chest.getX() - px;
                 int dy = chest.getY() - py;
@@ -1246,31 +1233,4 @@ class MapUpdateListener implements Emitter.Listener {
         };
     }
 
-    // --- Add this helper method ---
-    /**
-     * If a dangerous NPC is adjacent (<=3 cells), dodge and return true.
-     * Otherwise, return false.
-     */
-    private boolean dodgeIfDangerousNpcNearby(GameMap gameMap, Player player) throws IOException {
-        List<String> dangerNpcIds = Arrays.asList("NATIVE", "GHOST", "LEOPARD", "ANACONDA", "RHINO", "GOLEM");
-        boolean npcAdjacent = gameMap.getListEnemies().stream().anyMatch(
-                npc -> dangerNpcIds.contains(npc.getId())
-                        && PathUtils.distance(player.getPosition(), new Node(npc.getX(), npc.getY())) <= 2
-        );
-        if (npcAdjacent) {
-            for (String dir : Arrays.asList("l", "r", "u", "d")) {
-                Node next = moveNode(player.getPosition(), dir);
-                if (next.getX() >= 0 && next.getX() < gameMap.getMapSize()
-                        && next.getY() >= 0 && next.getY() < gameMap.getMapSize()
-                        && !restrictNode.contains(next)) {
-                    hero.move(dir);
-                    return true;
-                }
-            }
-            // fallback: try to retreat if no direction is available
-            dodgeOrRetreat(player, gameMap, player.getPosition());
-            return true;
-        }
-        return false;
-    }
 }
