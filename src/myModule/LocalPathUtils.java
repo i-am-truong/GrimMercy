@@ -22,7 +22,7 @@ public class LocalPathUtils {
         Node center = getCenterOfMap(mapSize);
         return Math.abs(current.getX() - center.getX()) < safeZone && Math.abs(current.getY() - center.getY()) < safeZone;
     }
-    public static String getShortestPath(GameMap gameMap, List<Node> restrictedNodes, Node current, final Node target, boolean skipDarkArea) {
+    public static String getShortestPath(GameMap gameMap, List<Node> restrictedNodes, Node current, final Node target, boolean skipDarkArea, boolean isLoot) {
         int[] Dx = new int[]{-1, 1, 0, 0};
         int[] Dy = new int[]{0, 0, -1, 1};
         int mapSize = gameMap.getMapSize();
@@ -30,7 +30,9 @@ public class LocalPathUtils {
         List<Obstacle> initThings = gameMap.getListIndestructibles();
         List<Node> listIndestructibleNodes = new ArrayList(initThings);
         listIndestructibleNodes.addAll(restrictedNodes);
-        listIndestructibleNodes.removeIf((node) -> node.x == target.x && node.y == target.y);
+        if(isLoot){
+            listIndestructibleNodes.removeIf((node) -> node.x == target.x && node.y == target.y);
+        }
         ArrayList<ArrayList<Integer>> isRestrictedNodes = new ArrayList(mapSize + 5);
         final ArrayList<ArrayList<Integer>> g = new ArrayList(mapSize + 5);
         ArrayList<ArrayList<Integer>> trace = new ArrayList(mapSize + 5);

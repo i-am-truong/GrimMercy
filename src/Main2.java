@@ -25,9 +25,9 @@ import java.util.function.Predicate;
 
 public class Main2 {
     private static final String SERVER_URL = "https://cf25-server.jsclub.dev";
-    private static final String GAME_ID = "163447";
-    private static final String PLAYER_NAME = "NeuroSama";
-    private static final String SECRET_KEY = "sk-jYHwqfPHRriQxLiwmFlLkQ:lw45Vm8gQPDYP6DpmdON7BngVLXhQ4wwAC8A7Sv-qVQMRPh_2siGmlFRkl0DbNR5a0x1MBjdPe_r-3MVr3Jnug";
+    private static final String GAME_ID = "127736";
+    private static final String PLAYER_NAME = "GrimMercy";
+    private static final String SECRET_KEY = "sk-aZZhcFwyTBWrgoC2BwRgWw:3nJswm1PjXcWnI-M6YX0r-VV47ml2quCqmSO6wBdp9gx6cKmbsiPwOOnoGliTWAnYvQT2SW4D7ETkTCAnKbRsA";
     public static void main(String[] args) throws IOException {
         Hero hero = new Hero(GAME_ID, PLAYER_NAME, SECRET_KEY);
         Emitter.Listener onMapUpdate = new MapUpdateListener2(hero);
@@ -42,7 +42,11 @@ class MapUpdateListener2 implements Emitter.Listener {
     }
     private static final Logger log = LogManager.getLogger(MapUpdateListener.class);
     private final Hero hero;
-
+//    intent:
+    private String currentIntent = null;
+    private int intentCooldown = 0; // Số tick cần giữ trước khi đánh giá lại
+    private Player playerTargetIntent = null;
+    private int attackIntentCooldown = 0;
     private int currentStep = 0;
     private final List<Node> restrictNode = new ArrayList<>();
     private static Node currentNodeTarget = null;
@@ -63,7 +67,6 @@ class MapUpdateListener2 implements Emitter.Listener {
     List<String> listSupportInventory = new ArrayList<>();
     Set<String> healingSet = Set.of("GOD_LEAF", "SPIRIT_TEAR", "MERMAID_TAIL", "PHOENIX_FEATHERS", "UNICORN_BLOOD");
     Set<String> specialSet = Set.of("ELIXIR", "MAGIC", "ELIXIR_OF_LIFE", "COMPASS");
-    //    List<String>
     @Override
     public void call(Object... args) {
         try {
@@ -109,14 +112,12 @@ class MapUpdateListener2 implements Emitter.Listener {
                 hero.useItem(supportItem.getId());
             }
         }
-//        tam thoi tranh loi smoke
         if(hasThrowable()){
             Weapon currentThrow = hero.getInventory().getThrowable();
             if(currentThrow!= null && currentThrow.getId().equalsIgnoreCase("SMOKE")){
                 hero.revokeItem("SMOKE");
             }
         }
-//        end tam thoi tranh loi
         if (currentStep != 0) {
             isShrinking = (currentSafeZone != gameMap.getSafeZone());
         }
@@ -127,6 +128,8 @@ class MapUpdateListener2 implements Emitter.Listener {
         ){
             safeNodeToRunBo = findClosestSafeSpot(gameMap,player);
         }
+
+
         currentStep++;
         updateRestrictNode(gameMap, player);
 
@@ -169,7 +172,7 @@ class MapUpdateListener2 implements Emitter.Listener {
         for (Player p : gameMap.getOtherPlayerInfo()) {
             restrictNode.add(new Node(p.getX(), p.getY()));
         }
-        String pathToHide = LocalPathUtils.getShortestPath(gameMap,restrictNode, player.getPosition(), safestSpot,false);
+        String pathToHide = LocalPathUtils.getShortestPath(gameMap,restrictNode, player.getPosition(), safestSpot,false,false);
         if(pathToHide != null){
             hero.move(pathToHide.substring(0,1));
         }else{
@@ -213,7 +216,7 @@ class MapUpdateListener2 implements Emitter.Listener {
                                 // Kiểm tra trong map
                                 if (x >= 0 && x < gameMap.getMapSize() && y >= 0 && y < gameMap.getMapSize()) {
                                     Node candidate = new Node(x, y);
-                                    pathToCenter = LocalPathUtils.getShortestPath(gameMap, restrictNode, player.getPosition(), candidate, false);
+                                    pathToCenter = LocalPathUtils.getShortestPath(gameMap, restrictNode, player.getPosition(), candidate, false,false);
 
                                     if (pathToCenter != null && !pathToCenter.isEmpty()) {
                                         hero.move(pathToCenter.substring(0, 1));
@@ -243,7 +246,7 @@ class MapUpdateListener2 implements Emitter.Listener {
             int tx, int ty
     ) {
         Node corner = new Node(tx, ty);
-        return LocalPathUtils.getShortestPath(map, restricted, current, corner, true);
+        return LocalPathUtils.getShortestPath(map, restricted, current, corner, true,false);
     }
 
     private Node findSafeSpotAwayFromEnemies(GameMap gameMap, Player player) {
@@ -344,11 +347,25 @@ class MapUpdateListener2 implements Emitter.Listener {
         ).toList();
 
         if (playersInRange.isEmpty()) {
-            dodgeOrRetreat(player, gameMap, player.getPosition());
-            return;
+            handleHunting(gameMap,player);
+        }
+        Player target = null;
+
+        if (playerTargetIntent != null &&
+                attackIntentCooldown > 0 &&
+                playersInRange.contains(playerTargetIntent)) {
+
+            target = playerTargetIntent;
+            attackIntentCooldown--;
+        } else {
+            target = playersInRange.stream()
+                    .min(Comparator.comparingDouble(Player::getHealth))
+                    .orElse(null);
+
+            attackIntentCooldown = 3;
+            playerTargetIntent = target;
         }
 
-        Player target = playersInRange.stream().min(Comparator.comparingDouble(Player::getHealth)).orElse(null);
 
 //        restrictNode.remove(target);
 
@@ -361,7 +378,6 @@ class MapUpdateListener2 implements Emitter.Listener {
         Weapon currenWeapon = myWeaponCanUse.stream()
                 .filter(w -> !w.getId().equalsIgnoreCase("SMOKE")) // Không dùng SMOKE để tấn công!
                 .max(Comparator.comparingInt(Weapon::getDamage)).orElse(null);
-
 
         if(currenWeapon !=null){
             boolean canAttack = canAttack(player.getPosition(),target.getPosition(),maxRange);
@@ -379,8 +395,7 @@ class MapUpdateListener2 implements Emitter.Listener {
 
                 String pathToAttack = getPathToAttack(gameMap,player.getPosition(),target.getPosition(),maxRange);
                 if (pathToAttack == null || pathToAttack.isEmpty()) {
-                    dodgeOrRetreat(player, gameMap, target.getPosition());
-                    return;
+                    handleHunting(gameMap,player);
                 }
                 System.out.println("path to attack is " + pathToAttack);
                 hero.move(pathToAttack.substring(0,1));
@@ -420,7 +435,9 @@ class MapUpdateListener2 implements Emitter.Listener {
                 }
             }
         }else{
-            dodgeOrRetreat(player, gameMap,target.getPosition());
+            handleHunting(gameMap,player);
+
+//            dodgeOrRetreat(player, gameMap,target.getPosition());
         }
 
 
@@ -491,6 +508,7 @@ class MapUpdateListener2 implements Emitter.Listener {
             int x = x2 + dx;
             Node curNode = new Node(x,y2);
             if (Math.abs(dx) <= range && x >= 0 && x < gameMap.getMapSize()
+                    &&!restrictNode.contains(curNode)
                     && PathUtils.checkInsideSafeArea(curNode,gameMap.getSafeZone(),gameMap.getMapSize())) {
                 candidatePositions.add(curNode);
             }
@@ -502,6 +520,7 @@ class MapUpdateListener2 implements Emitter.Listener {
             int y = y2 + dy;
             Node curNode = new Node(x2,y);
             if (Math.abs(dy) <= range && y >= 0 && y < gameMap.getMapSize()
+                    &&!restrictNode.contains(curNode)
                     && PathUtils.checkInsideSafeArea(curNode,gameMap.getSafeZone(),gameMap.getMapSize())) {
                 candidatePositions.add(curNode);
             }
@@ -512,13 +531,12 @@ class MapUpdateListener2 implements Emitter.Listener {
 
         for (Node target : candidatePositions) {
             if(restrictNode.contains(target)) continue;
-            String path = LocalPathUtils.getShortestPath(gameMap, restrictNode, current, target, false);
-            if (path != null && path.length() < minLength) {
+            String path = LocalPathUtils.getShortestPath(gameMap, restrictNode, current, target, false,false);
+            if (path != null && PathUtils.distance(current,target) < minLength) {
                 bestPath = path;
-                minLength = path.length();
+                minLength = PathUtils.distance(current,target);
             }
         }
-
         return bestPath;
     }
 
@@ -594,10 +612,10 @@ class MapUpdateListener2 implements Emitter.Listener {
         if (currenWeapon.getId().equalsIgnoreCase("AXE")) return 1;
         if (currenWeapon.getId().equalsIgnoreCase("MACE")) return 3;
 
-        if (currenWeapon.getId().equalsIgnoreCase("SCEPTER")) return 10;
+        if (currenWeapon.getId().equalsIgnoreCase("SCEPTER")) return 12;
         if (currenWeapon.getId().equalsIgnoreCase("CROSSBOW")) return 8;
         if (currenWeapon.getId().equalsIgnoreCase("RUBBER_GUN")) return 6;
-        if (currenWeapon.getId().equalsIgnoreCase("SHOTGUN")) return 1;
+        if (currenWeapon.getId().equalsIgnoreCase("SHOTGUN")) return 2;
 
         if (currenWeapon.getId().equalsIgnoreCase("BANANA")) return 6;
         if (currenWeapon.getId().equalsIgnoreCase("METEORITE_FRAGMENT")) return 6;
@@ -744,22 +762,32 @@ class MapUpdateListener2 implements Emitter.Listener {
             }
             if (currentStep >= 12) {
                 List<Node> temp = new ArrayList<>();
+                int mapSize = gameMap.getMapSize();
 
                 for (int i = 0; i < gameMap.getListEnemies().size(); i++) {
-                    if (enemyDirection[i].equals("ngang")) {
-                        for (int j = enemyMinEdge[i]; j <= enemyMaxEdge[i]; j++) {
-                            temp.add(new Node(toado[i], j)); // chỉ chính xác các ô enemy đi qua
-                        }
-                    } else if (enemyDirection[i].equals("doc")) {
-                        for (int j = enemyMinEdge[i]; j <= enemyMaxEdge[i]; j++) {
-                            temp.add(new Node(j, toado[i]));
+                    boolean isHorizontal = enemyDirection[i].equals("ngang");
+                    // xác định toạ độ gốc (baseX, baseY) lần lượt theo từng j
+                    for (int j = enemyMinEdge[i]; j <= enemyMaxEdge[i]; j++) {
+                        int baseX = isHorizontal ? toado[i] : j;
+                        int baseY = isHorizontal ? j : toado[i];
+
+                        // mở rộng ±1 theo cả hai trục để bao phủ hitbox 3x3
+                        for (int dx = -1; dx <= 1; dx++) {
+                            for (int dy = -1; dy <= 1; dy++) {
+                                int nx = baseX + dx;
+                                int ny = baseY + dy;
+                                // kiểm tra không vượt biên map
+                                if (nx >= 0 && nx < mapSize && ny >= 0 && ny < mapSize) {
+                                    temp.add(new Node(nx, ny));
+                                }
+                            }
                         }
                     }
                 }
 
                 restrictNode.addAll(temp);
-
             }
+
             if (currentStep < 12) {
                 for (int i = 0; i < gameMap.getListEnemies().size(); i++) {
                     List<Node> temp = new ArrayList<>();
@@ -807,50 +835,7 @@ class MapUpdateListener2 implements Emitter.Listener {
             }
         }
     }
-    private void carveSafeZoneAndEscape(GameMap gameMap, Player player) throws IOException {
-        Node p = player.getPosition();
-        int size = gameMap.getMapSize();
-
-        // 1) Kiểm tra xem 4 ô l/r/u/d xung quanh có bị chặn hết không
-        boolean allBlocked = true;
-        List<String> directions = List.of("l","r","u","d");
-        for (String dir : directions) {
-            Node n = moveNode(p, dir);
-            if (n.getX() >= 0 && n.getX() < size
-                    && n.getY() >= 0 && n.getY() < size
-                    && !restrictNode.contains(n)) {
-                allBlocked = false;
-                break;
-            }
-        }
-
-        if (allBlocked) {
-            // 2) Carve vùng 3x3 quanh player (loại bỏ khỏi restrictNode)
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dy = -1; dy <= 1; dy++) {
-                    int nx = p.getX() + dx, ny = p.getY() + dy;
-                    if (nx >= 0 && nx < size && ny >= 0 && ny < size) {
-                        restrictNode.remove(new Node(nx, ny));
-                    }
-                }
-            }
-
-            // 3) Di chuyển hero ngay một bước đầu tiên ra khỏi vị trí hiện tại
-            for (String dir : directions) {
-                Node next = moveNode(p, dir);
-                if (next.getX() >= 0 && next.getX() < size
-                        && next.getY() >= 0 && next.getY() < size
-                        && !restrictNode.contains(next)) {
-                    hero.move(dir);
-                    return;
-                }
-            }
-            // 4) Nếu vẫn không tìm được (góc bản đồ), fallback:
-            dodgeOrRetreat(player, gameMap, p);
-        }
-    }
-
-    public String getDecisionForNextStep(GameMap gameMap, Player player) {
+       public String getDecisionForNextStep(GameMap gameMap, Player player) {
         if (player == null || player.getHealth() <= 0) {
             return "die";
         }
@@ -860,6 +845,10 @@ class MapUpdateListener2 implements Emitter.Listener {
         boolean needRunBo = !PathUtils.checkInsideSafeArea(player.getPosition(), gameMap.getSafeZone()-8, gameMap.getMapSize())
                 && isShrinking;
         if (needRunBo) return "runBo";
+        if (intentCooldown > 0 && currentIntent != null) {
+            intentCooldown--;
+            return currentIntent;
+        }
 
 //        condition fight
         List<Player> others = gameMap.getOtherPlayerInfo().stream()
@@ -946,9 +935,18 @@ class MapUpdateListener2 implements Emitter.Listener {
         }
         System.out.println("In the end, needloot is : " + needLoot);
 
-        if (enemyInRange) return "fight";
-        if (needLoot) return "loot";
+        if (enemyInRange) {
+            currentIntent = "fight";
+            intentCooldown = 3;
+            return "fight";
+        }
+        if (needLoot) {
+            currentIntent = "loot";
+            intentCooldown = 3;
+            return "loot";
+        }
         return "hunting";
+
     }
 
 
@@ -970,7 +968,7 @@ class MapUpdateListener2 implements Emitter.Listener {
             }
 
         }
-        String pathRun = LocalPathUtils.getShortestPath(gameMap,restrictNode,player.getPosition(),safeNodeToRunBo,true);
+        String pathRun = LocalPathUtils.getShortestPath(gameMap,restrictNode,player.getPosition(),safeNodeToRunBo,true,false);
         if(pathRun == null){
             handleHide(gameMap,player);
         }else{
@@ -1021,16 +1019,31 @@ class MapUpdateListener2 implements Emitter.Listener {
 
     private void handleHunting(GameMap gameMap, Player player) throws IOException {
 
-        Player closestPlayer = gameMap.getOtherPlayerInfo().stream()
-                .filter(p -> p.getHealth() > 0)
-                .min(Comparator.comparingInt(p -> PathUtils.distance(player.getPosition(), p.getPosition())))
-                .orElse(null);
+        Player closestPlayer = null;
+        if (playerTargetIntent != null &&
+                attackIntentCooldown > 0 ) {
+
+            closestPlayer = playerTargetIntent;
+            attackIntentCooldown--;
+        } else {
+            closestPlayer = gameMap.getOtherPlayerInfo().stream()
+                    .filter(p -> p.getHealth() > 0)
+                    .min(Comparator.comparingInt(p -> PathUtils.distance(player.getPosition(), p.getPosition())))
+                    .orElse(null);
+            attackIntentCooldown = 3;
+            playerTargetIntent = closestPlayer;
+        }
         if(closestPlayer != null){
 //            restrictNode.remove(closestPlayer);
             List<Weapon> myWeapon = getMyListReadyWeapon();
             int maxRange = myWeapon.stream().mapToInt(this::getRangeWeaponAHead).max().orElse(1);
+
             String pathToAttackClosetPlayer = getPathToAttack(gameMap,player.getPosition(),closestPlayer.getPosition(),maxRange);
-            hero.move(pathToAttackClosetPlayer.substring(0,1));
+            if(pathToAttackClosetPlayer != null && !pathToAttackClosetPlayer.isEmpty()){
+                hero.move(pathToAttackClosetPlayer.substring(0,1));
+            }else {
+                handleHide(gameMap,player);
+            }
         }else{
             Node center = new Node(gameMap.getMapSize()/2,gameMap.getMapSize()/2);
             String pathToCenter = PathUtils.getShortestPath(gameMap,restrictNode,player.getPosition()
@@ -1187,22 +1200,30 @@ class MapUpdateListener2 implements Emitter.Listener {
         List<Node> result = new ArrayList<>();
         List<Obstacle> chests = map.getObstaclesByTag("DESTRUCTIBLE");
         int size = map.getMapSize();
-        for (int r = 1; r < size; r++) {
-            for (Obstacle c : chests) {
-                if (c.getHp() <= 0) continue;
-                Node pos = new Node(c.getX(), c.getY());
-                if (!PathUtils.checkInsideSafeArea(pos, map.getSafeZone(), size)) continue;
-                if (Math.abs(c.getX() - x) <= 10*r && Math.abs(c.getY() - y) <= 10*r) {
-                    int cx = c.getX(), cy = c.getY();
-                    if (cx == x) {
-                        result.add(new Node(cx, cy > y ? cy-1 : cy+1));
-                    } else {
-                        result.add(new Node(cx + (cx < x ? 1 : -1), cy));
-                    }
+
+        for (Obstacle c : chests) {
+            // chỉ chest còn HP
+            if (c.getHp() <= 0) continue;
+
+            Node pos = new Node(c.getX(), c.getY());
+            // chỉ trong vùng an toàn
+            if (!PathUtils.checkInsideSafeArea(pos, map.getSafeZone(), size)) continue;
+
+            int cx = c.getX(), cy = c.getY();
+            // thêm 4 node lân cận (trên/dưới/trái/phải) nếu không bị cấm
+            // và nằm trong biên map
+            int[][] deltas = {{0,1},{0,-1},{1,0},{-1,0}};
+            for (int[] d : deltas) {
+                int nx = cx + d[0];
+                int ny = cy + d[1];
+                if (nx < 0 || nx >= size || ny < 0 || ny >= size) continue;
+                Node adj = new Node(nx, ny);
+                if (!restrictNode.contains(adj)) {
+                    result.add(adj);
                 }
             }
-            if (!result.isEmpty()) break;
         }
+
         return result;
     }
 
@@ -1222,7 +1243,7 @@ class MapUpdateListener2 implements Emitter.Listener {
             }
         }
         if(currentNodeTarget != null){
-            path = LocalPathUtils.getShortestPath(map, restrictNode, current, currentNodeTarget, false);
+            path = LocalPathUtils.getShortestPath(map, restrictNode, current, currentNodeTarget, false,true);
         }
         if(path!= null && !path.isEmpty()){
             return path;
@@ -1246,7 +1267,8 @@ class MapUpdateListener2 implements Emitter.Listener {
             String step = path.substring(0, 1);
             hero.move(step);
         }else{
-            handleHide(map,player);
+            System.out.println("khong tim thay duong nen, di danh nhau");
+            handleHunting(map,player);
         }
 
     }
